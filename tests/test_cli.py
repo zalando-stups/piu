@@ -21,7 +21,7 @@ def test_success(monkeypatch):
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['--url=https://localhost/', '--password=foobar', 'myuser@somehost.example.org', '-r', '127.0.0.1', 'my reason'], catch_exceptions=False)
+        result = runner.invoke(cli, ['--even-url=https://localhost/', '--odd-host=odd.example.org', '--password=foobar', 'myuser@127.31.0.1', 'my reason'], catch_exceptions=False)
 
     assert response.text in result.output
 
