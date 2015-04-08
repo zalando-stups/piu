@@ -22,6 +22,21 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 STUPS_CIDR = ipaddress.ip_network('172.31.0.0/16')
 
 
+def load_config():
+    if os.path.exists(CONFIG_FILE_PATH):
+        with open(CONFIG_FILE_PATH, 'rb') as fd:
+            config = yaml.safe_load(fd)
+    else:
+        config = {}
+    return config
+
+
+def store_config(config):
+    os.makedirs(CONFIG_DIR_PATH, exist_ok=True)
+    with open(CONFIG_FILE_PATH, 'w') as fd:
+        yaml.dump(config, fd)
+
+
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.argument('host', metavar='[USER]@HOST')
 @click.argument('reason')
@@ -32,7 +47,8 @@ STUPS_CIDR = ipaddress.ip_network('172.31.0.0/16')
 @click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST')
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
 def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure):
-    # sdf
+    '''Request SSH access to a single host'''
+
     parts = host.split('@')
     if len(parts) > 1:
         username = parts[0]
@@ -41,31 +57,31 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure)
 
     hostname = parts[-1]
 
-    reason = ' '.join([reason] + list(reason_cont)).strip()
-
-    cacert = not insecure
-
-    if not even_url:
-        if not os.path.exists(CONFIG_FILE_PATH):
-            os.makedirs(CONFIG_DIR_PATH, exist_ok=True)
-            even_url = click.prompt('Please enter the Even SSH access granting service URL')
-            config = {'even_url': even_url}
-            with open(CONFIG_FILE_PATH, 'w') as fd:
-                yaml.dump(config, fd)
-
-        with open(CONFIG_FILE_PATH, 'rb') as fd:
-            config = yaml.safe_load(fd)
-        even_url = config['even_url']
-        if 'cacert' in config:
-            cacert = config['cacert']
-
     try:
         ip = ipaddress.ip_address(hostname)
     except ValueError:
         ip = None
 
+    reason = ' '.join([reason] + list(reason_cont)).strip()
+
+    cacert = not insecure
+
+    config = load_config()
+
+    even_url = even_url or config.get('even_url')
+    odd_host = odd_host or config.get('odd_host')
+    if 'cacert' in config:
+        cacert = config['cacert']
+
+    if not even_url:
+        even_url = click.prompt('Please enter the Even SSH access granting service URL')
+        config['even_url'] = even_url
+
     if ip and ip in STUPS_CIDR and not odd_host:
         odd_host = click.prompt('Please enter the Odd SSH bastion hostname')
+        config['odd_host'] = odd_host
+
+    store_config(config)
 
     password = password or keyring.get_password(KEYRING_KEY, user)
 
@@ -99,6 +115,7 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure)
                     fg='red', bold=True)
 
     keyring.set_password(KEYRING_KEY, user, password)
+
 
 def main():
     cli()
