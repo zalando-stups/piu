@@ -23,4 +23,8 @@ Usage
 .. code-block:: bash
 
     $ piu myuser@myhost my-reason
+    
+See the `STUPS documentation on Piu`_ for details.
+
+.. _STUPS documentation on Piu: http://stups.readthedocs.org/en/latest/components/piu.html
 
