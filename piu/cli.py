@@ -75,6 +75,9 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure)
 
     if not even_url:
         even_url = click.prompt('Please enter the Even SSH access granting service URL')
+        if not even_url.startswith('http'):
+            # convenience for humans: add HTTPS by default
+            even_url = 'https://{}'.format(even_url)
         config['even_url'] = even_url
 
     if ip and ip in STUPS_CIDR and not odd_host:
