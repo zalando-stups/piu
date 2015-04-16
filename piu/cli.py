@@ -14,6 +14,8 @@ import yaml
 
 from clickclick import error
 
+import piu
+
 
 KEYRING_KEY = 'piu'
 
@@ -44,6 +46,13 @@ def store_config(config, path):
         yaml.dump(config, fd)
 
 
+def print_version(ctx, param, value):
+    if not value or ctx.resilient_parsing:
+        return
+    click.echo('Piu {}'.format(piu.__version__))
+    ctx.exit()
+
+
 @click.command(context_settings=CONTEXT_SETTINGS)
 @click.argument('host', metavar='[USER]@HOST')
 @click.argument('reason')
@@ -55,6 +64,8 @@ def store_config(config, path):
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
 @click.option('--config-file', '-c', help='Use alternative configuration file',
               default=CONFIG_FILE_PATH, metavar='PATH')
+@click.option('-V', '--version', is_flag=True, callback=print_version, expose_value=False, is_eager=True,
+              help='Print the current version number and exit.')
 def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure, config_file):
     '''Request SSH access to a single host'''
 
