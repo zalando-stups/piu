@@ -9,7 +9,10 @@ import json
 import keyring
 import os
 import requests
+import socket
 import yaml
+
+from clickclick import error
 
 
 KEYRING_KEY = 'piu'
@@ -22,18 +25,22 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 STUPS_CIDR = ipaddress.ip_network('172.31.0.0/16')
 
 
-def load_config():
-    if os.path.exists(CONFIG_FILE_PATH):
-        with open(CONFIG_FILE_PATH, 'rb') as fd:
+def load_config(path):
+    if os.path.exists(path):
+        with open(path, 'rb') as fd:
             config = yaml.safe_load(fd)
+        if not isinstance(config, dict):
+            config = {}
     else:
         config = {}
     return config
 
 
-def store_config(config):
-    os.makedirs(CONFIG_DIR_PATH, exist_ok=True)
-    with open(CONFIG_FILE_PATH, 'w') as fd:
+def store_config(config, path):
+    dir_path = os.path.dirname(path)
+    if dir_path:
+        os.makedirs(dir_path, exist_ok=True)
+    with open(path, 'w') as fd:
         yaml.dump(config, fd)
 
 
@@ -41,12 +48,14 @@ def store_config(config):
 @click.argument('host', metavar='[USER]@HOST')
 @click.argument('reason')
 @click.argument('reason_cont', nargs=-1, metavar='[..]')
-@click.option('-u', '--user', help='Username to use for authentication', envvar='USER')
-@click.option('-p', '--password', help='Password to use for authentication', envvar='PIU_PASSWORD')
-@click.option('-E', '--even-url', help='Even SSH Access Granting Service URL', envvar='EVEN_URL')
-@click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST')
+@click.option('-u', '--user', help='Username to use for authentication', envvar='USER', metavar='NAME')
+@click.option('-p', '--password', help='Password to use for authentication', envvar='PIU_PASSWORD', metavar='PWD')
+@click.option('-E', '--even-url', help='Even SSH Access Granting Service URL', envvar='EVEN_URL', metavar='URI')
+@click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
-def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure):
+@click.option('--config-file', '-c', help='Use alternative configuration file',
+              default=CONFIG_FILE_PATH, metavar='PATH')
+def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure, config_file):
     '''Request SSH access to a single host'''
 
     parts = host.split('@')
@@ -66,25 +75,35 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure)
 
     cacert = not insecure
 
-    config = load_config()
+    config = load_config(config_file)
 
     even_url = even_url or config.get('even_url')
     odd_host = odd_host or config.get('odd_host')
     if 'cacert' in config:
         cacert = config['cacert']
 
-    if not even_url:
+    while not even_url:
         even_url = click.prompt('Please enter the Even SSH access granting service URL')
         if not even_url.startswith('http'):
             # convenience for humans: add HTTPS by default
             even_url = 'https://{}'.format(even_url)
+        try:
+            requests.get(even_url)
+        except:
+            error('Could not reach {}'.format(even_url))
+            even_url = None
         config['even_url'] = even_url
 
-    if ip and ip in STUPS_CIDR and not odd_host:
+    while ip and ip in STUPS_CIDR and not odd_host:
         odd_host = click.prompt('Please enter the Odd SSH bastion hostname')
+        try:
+            socket.getaddrinfo(odd_host, 22)
+        except:
+            error('Could not resolve hostname {}'.format(odd_host))
+            odd_host = None
         config['odd_host'] = odd_host
 
-    store_config(config)
+    store_config(config, config_file)
 
     password = password or keyring.get_password(KEYRING_KEY, user)
 

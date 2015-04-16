@@ -42,3 +42,9 @@ See the `STUPS documentation on Piu`_ for details.
 
 .. _STUPS documentation on Piu: http://stups.readthedocs.org/en/latest/components/piu.html
 
+Releasing
+=========
+
+.. code-block:: bash
+
+    $ ./release.sh <NEW-VERSION>
