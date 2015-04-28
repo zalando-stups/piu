@@ -61,12 +61,14 @@ def print_version(ctx, param, value):
 @click.option('-p', '--password', help='Password to use for authentication', envvar='PIU_PASSWORD', metavar='PWD')
 @click.option('-E', '--even-url', help='Even SSH Access Granting Service URL', envvar='EVEN_URL', metavar='URI')
 @click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
+@click.option('-t', '--lifetime', help='Lifetime of the SSH access request in minutes (default: 60)',
+              type=click.IntRange(1, 525600, clamp=True))
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
 @click.option('--config-file', '-c', help='Use alternative configuration file',
               default=CONFIG_FILE_PATH, metavar='PATH')
 @click.option('-V', '--version', is_flag=True, callback=print_version, expose_value=False, is_eager=True,
               help='Print the current version number and exit.')
-def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure, config_file):
+def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure, config_file, lifetime):
     '''Request SSH access to a single host'''
 
     parts = host.split('@')
@@ -131,6 +133,8 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
     data = {'username': username, 'hostname': first_host, 'reason': reason}
     if odd_host:
         data['remote-host'] = hostname
+    if lifetime:
+        data['lifetime_minutes'] = lifetime
     click.secho('Requesting access to host {hostname} for {username}..'.format(**vars()), bold=True)
     r = requests.post(even_url, headers={'Content-Type': 'application/json'},
                       data=json.dumps(data), auth=(user, password),
