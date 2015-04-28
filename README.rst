@@ -10,15 +10,15 @@ Piu
    :target: https://coveralls.io/r/zalando-stups/piu
    :alt: Code Coverage
 
-.. image:: https://pypip.in/download/stups-piu/badge.svg
+.. image:: https://img.shields.io/pypi/dw/stups-piu.svg
    :target: https://pypi.python.org/pypi/stups-piu/
    :alt: PyPI Downloads
 
-.. image:: https://pypip.in/version/stups-piu/badge.svg
+.. image:: https://img.shields.io/pypi/v/stups-piu.svg
    :target: https://pypi.python.org/pypi/stups-piu/
    :alt: Latest PyPI version
 
-.. image:: https://pypip.in/license/stups-piu/badge.svg
+.. image:: https://img.shields.io/pypi/l/stups-piu.svg
    :target: https://pypi.python.org/pypi/stups-piu/
    :alt: License
 
