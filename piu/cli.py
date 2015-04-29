@@ -132,7 +132,7 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
 
     data = {'username': username, 'hostname': first_host, 'reason': reason}
     if odd_host:
-        data['remote-host'] = hostname
+        data['remote_host'] = hostname
     if lifetime:
         data['lifetime_minutes'] = lifetime
     click.secho('Requesting access to host {hostname} for {username}..'.format(**vars()), bold=True)
