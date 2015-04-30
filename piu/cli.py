@@ -12,7 +12,7 @@ import requests
 import socket
 import yaml
 
-from clickclick import error
+from clickclick import error, info
 
 import piu
 
@@ -51,6 +51,33 @@ def print_version(ctx, param, value):
         return
     click.echo('Piu {}'.format(piu.__version__))
     ctx.exit()
+
+
+def request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password):
+    data = {'username': username, 'hostname': hostname, 'reason': reason}
+    host_via = hostname
+    if remote_host:
+        data['remote_host'] = remote_host
+        host_via = '{} via {}'.format(remote_host, hostname)
+    if lifetime:
+        data['lifetime_minutes'] = lifetime
+    click.secho('Requesting access to host {host_via} for {username}..'.format(host_via=host_via, username=username),
+                bold=True)
+    r = requests.post(even_url, headers={'Content-Type': 'application/json'},
+                      data=json.dumps(data), auth=(user, password),
+                      verify=cacert)
+    if r.status_code == 200:
+        click.secho(r.text, fg='green', bold=True)
+        ssh_command = ''
+        if remote_host:
+            ssh_command = 'ssh {username}@{remote_host}'.format(**vars())
+        click.secho('You can now access your server with the following command:')
+        click.secho('ssh -tA {username}@{hostname} {ssh_command}'.format(
+                    username=username, hostname=hostname, ssh_command=ssh_command))
+    else:
+        click.secho('Server returned status {code}: {text}'.format(code=r.status_code, text=r.text),
+                    fg='red', bold=True)
+    return r.status_code
 
 
 @click.command(context_settings=CONTEXT_SETTINGS)
@@ -127,31 +154,26 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
         even_url = even_url.rstrip('/') + '/access-requests'
 
     first_host = hostname
+    remote_host = hostname
     if odd_host:
         first_host = odd_host
 
-    data = {'username': username, 'hostname': first_host, 'reason': reason}
-    if odd_host:
-        data['remote_host'] = hostname
-    if lifetime:
-        data['lifetime_minutes'] = lifetime
-    click.secho('Requesting access to host {hostname} for {username}..'.format(**vars()), bold=True)
-    r = requests.post(even_url, headers={'Content-Type': 'application/json'},
-                      data=json.dumps(data), auth=(user, password),
-                      verify=cacert)
-    if r.status_code == 200:
-        click.secho(r.text, fg='green', bold=True)
-        ssh_command = ''
-        if odd_host:
-            ssh_command = 'ssh {username}@{hostname}'.format(**vars())
-        click.secho('You can now access your server with the following command:')
-        click.secho('ssh -tA {username}@{first_host} {ssh_command}'.format(
-                    username=username, first_host=first_host, ssh_command=ssh_command))
-    else:
-        click.secho('Server returned status {code}: {text}'.format(code=r.status_code, text=r.text),
-                    fg='red', bold=True)
+    if first_host == remote_host:
+        # user friendly behavior: it makes no sense to jump from bastion to itself
+        remote_host = None
+    elif remote_host.startswith('odd-'):
+        # user friendly behavior: if the remote host is obviously a odd host, just use it
+        first_host = remote_host
+        remote_host = None
 
-    keyring.set_password(KEYRING_KEY, user, password)
+    return_code = request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime, user, password)
+
+    if return_code == 200:
+        keyring.set_password(KEYRING_KEY, user, password)
+    elif return_code == 403:
+        info('Please check your username and password and try again.')
+        # delete the "wrong" password from the keyring to get a prompt next time
+        keyring.set_password(KEYRING_KEY, user, '')
 
 
 def main():

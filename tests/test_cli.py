@@ -26,6 +26,33 @@ def test_success(monkeypatch):
     assert response.text in result.output
 
 
+def test_bad_request(monkeypatch):
+    response = MagicMock(status_code=400, text='**MAGIC-BAD-REQUEST**')
+    monkeypatch.setattr('requests.post', MagicMock(return_value=response))
+    monkeypatch.setattr('keyring.set_password', MagicMock())
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['--lifetime=15', '--even-url=https://localhost/', '--password=foobar', 'myuser@odd-host', 'my reason'], catch_exceptions=False)
+
+    assert response.text in result.output
+    assert 'Server returned status 400:' in result.output
+
+
+def test_auth_failure(monkeypatch):
+    response = MagicMock(status_code=403, text='**MAGIC-AUTH-FAILED**')
+    monkeypatch.setattr('requests.post', MagicMock(return_value=response))
+    monkeypatch.setattr('keyring.set_password', MagicMock())
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['--even-url=https://localhost/', '--password=invalid', 'myuser@odd-host', 'my reason'], catch_exceptions=False)
+
+    assert response.text in result.output
+    assert 'Server returned status 403:' in result.output
+    assert 'Please check your username and password and try again' in result.output
+
+
 def test_dialog(monkeypatch):
     response = MagicMock(status_code=200, text='**MAGIC-SUCCESS**')
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
