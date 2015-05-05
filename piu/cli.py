@@ -70,7 +70,7 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
         click.secho(r.text, fg='green', bold=True)
         ssh_command = ''
         if remote_host:
-            ssh_command = 'ssh {username}@{remote_host}'.format(**vars())
+            ssh_command = 'ssh -o StrictHostKeyChecking=no {username}@{remote_host}'.format(**vars())
         click.secho('You can now access your server with the following command:')
         click.secho('ssh -tA {username}@{hostname} {ssh_command}'.format(
                     username=username, hostname=hostname, ssh_command=ssh_command))
