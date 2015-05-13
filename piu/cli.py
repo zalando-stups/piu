@@ -12,9 +12,15 @@ import requests
 import socket
 import yaml
 
+
 from clickclick import error, info
 
 import piu
+
+try:
+    import pyperclip
+except ImportError:
+    pyperclip = None
 
 
 KEYRING_KEY = 'piu'
@@ -72,8 +78,14 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
         if remote_host:
             ssh_command = 'ssh -o StrictHostKeyChecking=no {username}@{remote_host}'.format(**vars())
         click.secho('You can now access your server with the following command:')
-        click.secho('ssh -tA {username}@{hostname} {ssh_command}'.format(
-                    username=username, hostname=hostname, ssh_command=ssh_command))
+        command = 'ssh -tA {username}@{hostname} {ssh_command}'.format(
+                  username=username, hostname=hostname, ssh_command=ssh_command)
+        click.secho(command)
+        click.secho('\nOr just check your clipboard and run ctrl/command + v (requires package "xclip" on Linux)')
+        if pyperclip is not None:
+            pyperclip.copy(command)
+        else:
+            pass
     else:
         click.secho('Server returned status {code}: {text}'.format(code=r.status_code, text=r.text),
                     fg='red', bold=True)
