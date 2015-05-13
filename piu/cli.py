@@ -59,7 +59,7 @@ def print_version(ctx, param, value):
     ctx.exit()
 
 
-def request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password):
+def request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password, clip):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
     host_via = hostname
     if remote_host:
@@ -81,11 +81,10 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
         command = 'ssh -tA {username}@{hostname} {ssh_command}'.format(
                   username=username, hostname=hostname, ssh_command=ssh_command)
         click.secho(command)
-        click.secho('\nOr just check your clipboard and run ctrl/command + v (requires package "xclip" on Linux)')
-        if pyperclip is not None:
-            pyperclip.copy(command)
-        else:
-            pass
+        if clip:
+            click.secho('\nOr just check your clipboard and run ctrl/command + v (requires package "xclip" on Linux)')
+            if pyperclip is not None:
+                pyperclip.copy(command)
     else:
         click.secho('Server returned status {code}: {text}'.format(code=r.status_code, text=r.text),
                     fg='red', bold=True)
@@ -107,7 +106,8 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
               default=CONFIG_FILE_PATH, metavar='PATH')
 @click.option('-V', '--version', is_flag=True, callback=print_version, expose_value=False, is_eager=True,
               help='Print the current version number and exit.')
-def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure, config_file, lifetime):
+@click.option('--clip', is_flag=True, help='Copy SSH command into clipboard', default=False)
+def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure, config_file, lifetime, clip):
     '''Request SSH access to a single host'''
 
     parts = host.split('@')
@@ -178,7 +178,8 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
         first_host = remote_host
         remote_host = None
 
-    return_code = request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime, user, password)
+    return_code = request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime,
+                                 user, password, clip)
 
     if return_code == 200:
         keyring.set_password(KEYRING_KEY, user, password)
