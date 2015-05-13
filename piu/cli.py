@@ -76,7 +76,7 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
         click.secho('ssh -tA {username}@{hostname} {ssh_command}'.format(
                     username=username, hostname=hostname, ssh_command=ssh_command))
         click.secho('\nOr just check your clipboard and run ctrl/command + v')
-        clipboard ='ssh -tA {username}@{hostname} {ssh_command}'.format(
+        clipboard = 'ssh -tA {username}@{hostname} {ssh_command}'.format(
                     username=username, hostname=hostname, ssh_command=ssh_command)
         pyperclip.copy(clipboard)
     else:
