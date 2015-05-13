@@ -19,7 +19,7 @@ import piu
 
 try:
     import pyperclip
-except ImportError:
+except:
     pyperclip = None
 
 
