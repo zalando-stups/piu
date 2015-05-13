@@ -11,6 +11,7 @@ import os
 import requests
 import socket
 import yaml
+import pyperclip
 
 from clickclick import error, info
 
@@ -74,6 +75,10 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
         click.secho('You can now access your server with the following command:')
         click.secho('ssh -tA {username}@{hostname} {ssh_command}'.format(
                     username=username, hostname=hostname, ssh_command=ssh_command))
+        click.secho('\nOr just check your clipboard and run ctrl/command + v')
+        clipboard ='ssh -tA {username}@{hostname} {ssh_command}'.format(
+                    username=username, hostname=hostname, ssh_command=ssh_command)
+        pyperclip.copy(clipboard)
     else:
         click.secho('Server returned status {code}: {text}'.format(code=r.status_code, text=r.text),
                     fg='red', bold=True)
