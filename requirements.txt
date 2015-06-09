@@ -3,3 +3,4 @@ PyYAML
 keyring
 requests
 pyperclip
+stups-zign

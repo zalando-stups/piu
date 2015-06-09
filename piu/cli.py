@@ -11,6 +11,7 @@ import os
 import requests
 import socket
 import yaml
+import zign.api
 
 
 from clickclick import error, info
@@ -67,10 +68,13 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
         host_via = '{} via {}'.format(remote_host, hostname)
     if lifetime:
         data['lifetime_minutes'] = lifetime
+    token = zign.api.get_named_token(['uid'], 'employees', 'piu', user, password)
+    access_token = token.get('access_token')
     click.secho('Requesting access to host {host_via} for {username}..'.format(host_via=host_via, username=username),
                 bold=True)
-    r = requests.post(even_url, headers={'Content-Type': 'application/json'},
-                      data=json.dumps(data), auth=(user, password),
+    r = requests.post(even_url, headers={'Content-Type': 'application/json',
+                                         'Authorization': 'Bearer {}'.format(access_token)},
+                      data=json.dumps(data),
                       verify=cacert)
     if r.status_code == 200:
         click.secho(r.text, fg='green', bold=True)
