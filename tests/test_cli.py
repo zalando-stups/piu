@@ -2,6 +2,7 @@
 from click.testing import CliRunner
 from mock import MagicMock
 import yaml
+import zign.api
 from piu.cli import cli
 
 
@@ -53,7 +54,6 @@ def test_auth_failure(monkeypatch):
 
     assert response.text in result.output
     assert 'Server returned status 403:' in result.output
-    assert 'Please check your username and password and try again' in result.output
 
 
 def test_dialog(monkeypatch):
@@ -69,5 +69,21 @@ def test_dialog(monkeypatch):
     with runner.isolated_filesystem():
         result = runner.invoke(cli, ['--config-file=config.yaml', 'myuser@172.31.0.1', 'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
 
+    assert result.exit_code == 0
     assert response.text in result.output
 
+def test_oauth_failure(monkeypatch):
+    response = MagicMock(status_code=200, text='**MAGIC-SUCCESS**')
+    monkeypatch.setattr('zign.api.get_named_token', MagicMock(side_effect=zign.api.ServerError('**MAGIC-FAIL**')))
+    monkeypatch.setattr('requests.post', MagicMock(return_value=response))
+    monkeypatch.setattr('requests.get', MagicMock(return_value=response))
+    monkeypatch.setattr('socket.getaddrinfo', MagicMock())
+    monkeypatch.setattr('keyring.set_password', MagicMock())
+    monkeypatch.setattr('keyring.get_password', MagicMock(return_value=None))
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['--config-file=config.yaml', 'myuser@172.31.0.1', 'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
+
+    assert result.exit_code == 500
+    assert 'Server error: **MAGIC-FAIL**' in result.output

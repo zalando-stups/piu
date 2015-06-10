@@ -1,6 +1,5 @@
-clickclick>=0.5
+clickclick>=0.10
 PyYAML
-keyring
 requests
 pyperclip
-stups-zign
+stups-zign>=0.16

@@ -6,15 +6,14 @@ Helper script to request access to a certain host.
 import click
 import ipaddress
 import json
-import keyring
 import os
 import requests
 import socket
+import sys
 import yaml
 import zign.api
 
-
-from clickclick import error, info
+from clickclick import error
 
 import piu
 
@@ -23,8 +22,6 @@ try:
 except:
     pyperclip = None
 
-
-KEYRING_KEY = 'piu'
 
 CONFIG_DIR_PATH = click.get_app_dir('piu')
 CONFIG_FILE_PATH = os.path.join(CONFIG_DIR_PATH, 'piu.yaml')
@@ -68,7 +65,12 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
         host_via = '{} via {}'.format(remote_host, hostname)
     if lifetime:
         data['lifetime_minutes'] = lifetime
-    token = zign.api.get_named_token(['uid'], 'employees', 'piu', user, password)
+    try:
+        token = zign.api.get_named_token(['uid'], 'employees', 'piu', user, password, prompt=True)
+    except zign.api.ServerError as e:
+        click.secho('{}'.format(e), fg='red', bold=True)
+        return 500
+
     access_token = token.get('access_token')
     click.secho('Requesting access to host {host_via} for {username}..'.format(host_via=host_via, username=username),
                 bold=True)
@@ -99,8 +101,9 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
 @click.argument('host', metavar='[USER]@HOST')
 @click.argument('reason')
 @click.argument('reason_cont', nargs=-1, metavar='[..]')
-@click.option('-u', '--user', help='Username to use for authentication', envvar='USER', metavar='NAME')
-@click.option('-p', '--password', help='Password to use for authentication', envvar='PIU_PASSWORD', metavar='PWD')
+@click.option('-u', '--user', help='Username to use for OAuth2 authentication', envvar='USER', metavar='NAME')
+@click.option('-p', '--password', help='Password to use for OAuth2 authentication',
+              envvar='PIU_PASSWORD', metavar='PWD')
 @click.option('-E', '--even-url', help='Even SSH Access Granting Service URL', envvar='EVEN_URL', metavar='URI')
 @click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
 @click.option('-t', '--lifetime', help='Lifetime of the SSH access request in minutes (default: 60)',
@@ -161,11 +164,6 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
 
     store_config(config, config_file)
 
-    password = password or keyring.get_password(KEYRING_KEY, user)
-
-    if not password:
-        password = click.prompt('Password', hide_input=True)
-
     if not even_url.endswith('/access-requests'):
         even_url = even_url.rstrip('/') + '/access-requests'
 
@@ -185,12 +183,8 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
     return_code = request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime,
                                  user, password, clip)
 
-    if return_code == 200:
-        keyring.set_password(KEYRING_KEY, user, password)
-    elif return_code == 403:
-        info('Please check your username and password and try again.')
-        # delete the "wrong" password from the keyring to get a prompt next time
-        keyring.set_password(KEYRING_KEY, user, '')
+    if return_code != 200:
+        sys.exit(return_code)
 
 
 def main():
