@@ -27,8 +27,23 @@ CONFIG_DIR_PATH = click.get_app_dir('piu')
 CONFIG_FILE_PATH = os.path.join(CONFIG_DIR_PATH, 'piu.yaml')
 
 CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
+DEFAULT_COMMAND = 'request-access'
 
 STUPS_CIDR = ipaddress.ip_network('172.31.0.0/16')
+
+
+class AliasedDefaultGroup(AliasedGroup):
+
+    def resolve_command(self, ctx, args):
+        cmd_name = args[0]
+        cmd = AliasedGroup.get_command(self, ctx, cmd_name)
+        if not cmd:
+            cmd_name = DEFAULT_COMMAND
+            cmd = AliasedGroup.get_command(self, ctx, cmd_name)
+            new_args = args
+        else:
+            new_args = args[1:]
+        return cmd_name, cmd, new_args
 
 
 def load_config(path):
@@ -97,7 +112,7 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host, l
     return r.status_code
 
 
-@click.group(cls=AliasedGroup, context_settings=CONTEXT_SETTINGS)
+@click.group(cls=AliasedDefaultGroup, context_settings=CONTEXT_SETTINGS)
 @click.option('--config-file', '-c', help='Use alternative configuration file',
               default=CONFIG_FILE_PATH, metavar='PATH')
 @click.option('-V', '--version', is_flag=True, callback=print_version, expose_value=False, is_eager=True,

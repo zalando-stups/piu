@@ -10,7 +10,7 @@ def test_missing_reason():
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['req', 'myuser@somehost.example.org'], catch_exceptions=False)
+        result = runner.invoke(cli, ['myuser@somehost.example.org'], catch_exceptions=False)
 
     assert 'Missing argument "reason"' in result.output
 
@@ -23,7 +23,7 @@ def test_success(monkeypatch):
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['request-access', '--lifetime=15', '--even-url=https://localhost/', '--odd-host=odd.example.org', '--password=foobar', 'myuser@127.31.0.1', 'my reason'], catch_exceptions=False)
+        result = runner.invoke(cli, ['myuser@127.31.0.1', '--lifetime=15', '--even-url=https://localhost/', '--odd-host=odd.example.org', '--password=foobar', 'my reason'], catch_exceptions=False)
 
     assert response.text in result.output
 
