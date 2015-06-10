@@ -47,14 +47,12 @@ class AliasedDefaultGroup(AliasedGroup):
 
 
 def load_config(path):
-    if os.path.exists(path):
+    try:
         with open(path, 'rb') as fd:
             config = yaml.safe_load(fd)
-        if not isinstance(config, dict):
-            config = {}
-    else:
-        config = {}
-    return config
+    except:
+        config = None
+    return config or {}
 
 
 def store_config(config, path):
