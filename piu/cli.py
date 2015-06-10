@@ -4,6 +4,7 @@ Helper script to request access to a certain host.
 '''
 
 import click
+import datetime
 import ipaddress
 import json
 import os
@@ -13,7 +14,7 @@ import sys
 import yaml
 import zign.api
 
-from clickclick import error, AliasedGroup
+from clickclick import error, AliasedGroup, print_table, OutputFormat
 
 import piu
 
@@ -30,6 +31,41 @@ CONTEXT_SETTINGS = dict(help_option_names=['-h', '--help'])
 DEFAULT_COMMAND = 'request-access'
 
 STUPS_CIDR = ipaddress.ip_network('172.31.0.0/16')
+
+STATUS_NAMES = [
+    'REQUESTED',
+    'GRANTED',
+    'DENIED',
+    'FAILED',
+    'EXPIRED',
+    'REVOKED'
+]
+
+STYLES = {
+    'REQUESTED': {'fg': 'yellow', 'bold': True},
+    'GRANTED': {'fg': 'green'},
+    'DENIED': {'fg': 'red', 'bold': True},
+    'FAILED': {'fg': 'red', 'bold': True},
+    'EXPIRED': {'fg': 'yellow', 'bold': True},
+    'REVOKED': {'fg': 'red'},
+    'OK': {'fg': 'green'},
+    'ERROR': {'fg': 'red'},
+    }
+
+
+TITLES = {
+    'created_time': 'Created',
+    'lifetime_minutes': 'TTL'
+}
+
+MAX_COLUMN_WIDTHS = {
+    'reason': 50,
+    'remote_host': 20,
+    'status_reason': 50
+}
+
+output_option = click.option('-o', '--output', type=click.Choice(['text', 'json', 'tsv']), default='text',
+                             help='Use alternative output format')
 
 
 class AliasedDefaultGroup(AliasedGroup):
@@ -206,6 +242,40 @@ def request_access(obj, host, user, password, even_url, odd_host, reason, reason
 
     if return_code != 200:
         sys.exit(return_code)
+
+
+@cli.command('list-access-requests')
+@click.option('-u', '--user', help='Filter by username', envvar='USER', metavar='NAME')
+@click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
+@click.option('-s', '--status', help='Filter by status', metavar='NAME', type=click.Choice(STATUS_NAMES))
+@click.option('-l', '--limit', help='Limit', type=int, default=20)
+@click.option('--offset', help='Offset', type=int, default=0)
+@output_option
+@click.pass_obj
+def list_access_requests(obj, user, odd_host, status, limit, offset, output):
+    '''List access requests filtered by user, host and status'''
+    config = load_config(obj)
+
+    if user == '*':
+        user = None
+
+    token = zign.api.get_existing_token('piu')
+    if not token:
+        raise click.UsageError('No valid OAuth token named "piu" found.')
+
+    access_token = token.get('access_token')
+    params = {'username': user, 'hostname': odd_host, 'status': status, 'limit': limit, 'offset': offset},
+    r = requests.get(config.get('even_url').rstrip('/') + '/access-requests',
+                     params=params,
+                     headers={'Authorization': 'Bearer {}'.format(access_token)})
+    rows = []
+    for req in r.json():
+        req['created_time'] = datetime.datetime.strptime(req['created'], '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()
+        rows.append(req)
+    rows.sort(key=lambda x: x['created_time'])
+    with OutputFormat(output):
+        print_table('username hostname remote_host reason lifetime_minutes status status_reason created_time'.split(),
+                    rows, styles=STYLES, titles=TITLES, max_column_widths=MAX_COLUMN_WIDTHS)
 
 
 def main():
