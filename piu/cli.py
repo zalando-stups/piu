@@ -245,10 +245,11 @@ def request_access(obj, host, user, password, even_url, odd_host, reason, reason
 
 
 @cli.command('list-access-requests')
-@click.option('-u', '--user', help='Filter by username', envvar='USER', metavar='NAME')
-@click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
+@click.option('-u', '--user', help='Filter by username', metavar='NAME')
+@click.option('-O', '--odd-host', help='Odd SSH bastion hostname (default: my configured odd host)',
+              envvar='ODD_HOST', metavar='HOSTNAME', default='MY-ODD-HOST')
 @click.option('-s', '--status', help='Filter by status', metavar='NAME', type=click.Choice(STATUS_NAMES))
-@click.option('-l', '--limit', help='Limit', type=int, default=20)
+@click.option('-l', '--limit', help='Limit number of results', type=int, default=20)
 @click.option('--offset', help='Offset', type=int, default=0)
 @output_option
 @click.pass_obj
@@ -259,15 +260,21 @@ def list_access_requests(obj, user, odd_host, status, limit, offset, output):
     if user == '*':
         user = None
 
+    if odd_host == '*':
+        odd_host = None
+    elif odd_host == 'MY-ODD-HOST':
+        odd_host = config.get('odd_host')
+
     token = zign.api.get_existing_token('piu')
     if not token:
         raise click.UsageError('No valid OAuth token named "piu" found.')
 
     access_token = token.get('access_token')
-    params = {'username': user, 'hostname': odd_host, 'status': status, 'limit': limit, 'offset': offset},
+    params = {'username': user, 'hostname': odd_host, 'status': status, 'limit': limit, 'offset': offset}
     r = requests.get(config.get('even_url').rstrip('/') + '/access-requests',
                      params=params,
                      headers={'Authorization': 'Bearer {}'.format(access_token)})
+    r.raise_for_status()
     rows = []
     for req in r.json():
         req['created_time'] = datetime.datetime.strptime(req['created'], '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()
