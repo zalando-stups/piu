@@ -10,7 +10,7 @@ def test_missing_reason():
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['myuser@somehost.example.org'], catch_exceptions=False)
+        result = runner.invoke(cli, ['req', 'myuser@somehost.example.org'], catch_exceptions=False)
 
     assert 'Missing argument "reason"' in result.output
 
@@ -23,7 +23,7 @@ def test_success(monkeypatch):
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['--lifetime=15', '--even-url=https://localhost/', '--odd-host=odd.example.org', '--password=foobar', 'myuser@127.31.0.1', 'my reason'], catch_exceptions=False)
+        result = runner.invoke(cli, ['request-access', '--lifetime=15', '--even-url=https://localhost/', '--odd-host=odd.example.org', '--password=foobar', 'myuser@127.31.0.1', 'my reason'], catch_exceptions=False)
 
     assert response.text in result.output
 
@@ -36,7 +36,7 @@ def test_bad_request(monkeypatch):
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['--lifetime=15', '--even-url=https://localhost/', '--password=foobar', 'myuser@odd-host', 'my reason'], catch_exceptions=False)
+        result = runner.invoke(cli, ['req', '--lifetime=15', '--even-url=https://localhost/', '--password=foobar', 'myuser@odd-host', 'my reason'], catch_exceptions=False)
 
     assert response.text in result.output
     assert 'Server returned status 400:' in result.output
@@ -50,7 +50,7 @@ def test_auth_failure(monkeypatch):
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['--even-url=https://localhost/', '--password=invalid', 'myuser@odd-host', 'my reason'], catch_exceptions=False)
+        result = runner.invoke(cli, ['r', '--even-url=https://localhost/', '--password=invalid', 'myuser@odd-host', 'my reason'], catch_exceptions=False)
 
     assert response.text in result.output
     assert 'Server returned status 403:' in result.output
@@ -67,7 +67,7 @@ def test_dialog(monkeypatch):
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['--config-file=config.yaml', 'myuser@172.31.0.1', 'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
+        result = runner.invoke(cli, ['--config-file=config.yaml', 'req', 'myuser@172.31.0.1', 'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
 
     assert result.exit_code == 0
     assert response.text in result.output
@@ -83,7 +83,7 @@ def test_oauth_failure(monkeypatch):
     runner = CliRunner()
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['--config-file=config.yaml', 'myuser@172.31.0.1', 'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
+        result = runner.invoke(cli, ['--config-file=config.yaml', 'req', 'myuser@172.31.0.1', 'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
 
     assert result.exit_code == 500
     assert 'Server error: **MAGIC-FAIL**' in result.output

@@ -13,7 +13,7 @@ import sys
 import yaml
 import zign.api
 
-from clickclick import error
+from clickclick import error, AliasedGroup
 
 import piu
 
@@ -57,7 +57,7 @@ def print_version(ctx, param, value):
     ctx.exit()
 
 
-def request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password, clip):
+def _request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password, clip):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
     host_via = hostname
     if remote_host:
@@ -97,7 +97,17 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
     return r.status_code
 
 
-@click.command(context_settings=CONTEXT_SETTINGS)
+@click.group(cls=AliasedGroup, context_settings=CONTEXT_SETTINGS)
+@click.option('--config-file', '-c', help='Use alternative configuration file',
+              default=CONFIG_FILE_PATH, metavar='PATH')
+@click.option('-V', '--version', is_flag=True, callback=print_version, expose_value=False, is_eager=True,
+              help='Print the current version number and exit.')
+@click.pass_context
+def cli(ctx, config_file):
+    ctx.obj = config_file
+
+
+@cli.command('request-access')
 @click.argument('host', metavar='[USER]@HOST')
 @click.argument('reason')
 @click.argument('reason_cont', nargs=-1, metavar='[..]')
@@ -109,12 +119,9 @@ def request_access(even_url, cacert, username, hostname, reason, remote_host, li
 @click.option('-t', '--lifetime', help='Lifetime of the SSH access request in minutes (default: 60)',
               type=click.IntRange(1, 525600, clamp=True))
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
-@click.option('--config-file', '-c', help='Use alternative configuration file',
-              default=CONFIG_FILE_PATH, metavar='PATH')
-@click.option('-V', '--version', is_flag=True, callback=print_version, expose_value=False, is_eager=True,
-              help='Print the current version number and exit.')
 @click.option('--clip', is_flag=True, help='Copy SSH command into clipboard', default=False)
-def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure, config_file, lifetime, clip):
+@click.pass_obj
+def request_access(obj, host, user, password, even_url, odd_host, reason, reason_cont, insecure, lifetime, clip):
     '''Request SSH access to a single host'''
 
     parts = host.split('@')
@@ -134,6 +141,7 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
 
     cacert = not insecure
 
+    config_file = obj
     config = load_config(config_file)
 
     even_url = even_url or config.get('even_url')
@@ -180,8 +188,8 @@ def cli(host, user, password, even_url, odd_host, reason, reason_cont, insecure,
         first_host = remote_host
         remote_host = None
 
-    return_code = request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime,
-                                 user, password, clip)
+    return_code = _request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime,
+                                  user, password, clip)
 
     if return_code != 200:
         sys.exit(return_code)
