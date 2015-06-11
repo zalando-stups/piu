@@ -1,5 +1,5 @@
 ===
-Piu
+Più
 ===
 
 .. image:: https://travis-ci.org/zalando-stups/piu.svg?branch=master
@@ -22,7 +22,7 @@ Piu
    :target: https://pypi.python.org/pypi/stups-piu/
    :alt: License
 
-Piu is the command line client for the "even" SSH access granting service.
+Più is the command line client for the "even" SSH access granting service.
 
 Installation
 ============
@@ -38,9 +38,9 @@ Usage
 
     $ piu myuser@myhost my-reason
 
-See the `STUPS documentation on Piu`_ for details.
+See the `STUPS documentation on Più`_ for details.
 
-.. _STUPS documentation on Piu: http://stups.readthedocs.org/en/latest/components/piu.html
+.. _STUPS documentation on Più: http://stups.readthedocs.org/en/latest/components/piu.html
 
 Releasing
 =========
