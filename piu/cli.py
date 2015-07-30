@@ -160,7 +160,7 @@ def cli(ctx, config_file):
 @click.argument('host', metavar='[USER]@HOST')
 @click.argument('reason')
 @click.argument('reason_cont', nargs=-1, metavar='[..]')
-@click.option('-u', '--user', help='Username to use for OAuth2 authentication', envvar='USER', metavar='NAME')
+@click.option('-U', '--user', help='Username to use for OAuth2 authentication', envvar='USER', metavar='NAME')
 @click.option('-p', '--password', help='Password to use for OAuth2 authentication',
               envvar='PIU_PASSWORD', metavar='PWD')
 @click.option('-E', '--even-url', help='Even SSH Access Granting Service URL', envvar='EVEN_URL', metavar='URI')
