@@ -11,6 +11,7 @@ import os
 import requests
 import socket
 import sys
+import time
 import yaml
 import zign.api
 
@@ -66,6 +67,22 @@ MAX_COLUMN_WIDTHS = {
 
 output_option = click.option('-o', '--output', type=click.Choice(['text', 'json', 'tsv']), default='text',
                              help='Use alternative output format')
+
+
+def parse_time(s: str) -> float:
+    '''
+    >>> parse_time('2015-04-14T19:09:01.000Z') > 0
+    True
+    '''
+    try:
+        utc = datetime.datetime.strptime(s, '%Y-%m-%dT%H:%M:%S.%fZ')
+        ts = time.time()
+        utc_offset = datetime.datetime.fromtimestamp(ts) - datetime.datetime.utcfromtimestamp(ts)
+        local = utc + utc_offset
+        return local.timestamp()
+    except Exception as e:
+        print(e)
+        return None
 
 
 class AliasedDefaultGroup(AliasedGroup):
@@ -279,7 +296,7 @@ def list_access_requests(obj, user, odd_host, status, limit, offset, output):
     r.raise_for_status()
     rows = []
     for req in r.json():
-        req['created_time'] = datetime.datetime.strptime(req['created'], '%Y-%m-%dT%H:%M:%S.%f%z').timestamp()
+        req['created_time'] = parse_time(req['created'])
         rows.append(req)
     rows.sort(key=lambda x: x['created_time'])
     with OutputFormat(output):
