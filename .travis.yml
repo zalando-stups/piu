@@ -1,6 +1,8 @@
 os:
   - linux
-  - osx
+    # Deactivated OSX. Same issue happened to other python projects on OSX.
+    # https://github.com/jkbrzt/httpie/commit/8eb460a6f3925a6020020bf412ccec7342294a60
+    #  - osx
 before_install:
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then sudo apt-get install xclip; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then sudo easy_install pip; fi
