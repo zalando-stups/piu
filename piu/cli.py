@@ -284,11 +284,8 @@ def list_access_requests(obj, user, odd_host, status, limit, offset, output):
     elif odd_host == 'MY-ODD-HOST':
         odd_host = config.get('odd_host')
 
-    token = zign.api.get_existing_token('piu')
-    if not token:
-        raise click.UsageError('No valid OAuth token named "piu" found.')
+    access_token = zign.api.get_token('piu', ['piu'])
 
-    access_token = token.get('access_token')
     params = {'username': user, 'hostname': odd_host, 'status': status, 'limit': limit, 'offset': offset}
     r = requests.get(config.get('even_url').rstrip('/') + '/access-requests',
                      params=params,
