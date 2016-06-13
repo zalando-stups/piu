@@ -8,6 +8,7 @@ import datetime
 import ipaddress
 import json
 import os
+import subprocess
 import requests
 import socket
 import sys
@@ -123,7 +124,7 @@ def print_version(ctx, param, value):
     ctx.exit()
 
 
-def _request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password, clip):
+def _request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password, clip, connect):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
     host_via = hostname
     if remote_host:
@@ -149,9 +150,11 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host, l
         ssh_command = ''
         if remote_host:
             ssh_command = 'ssh -o StrictHostKeyChecking=no {username}@{remote_host}'.format(**vars())
-        click.secho('You can now access your server with the following command:')
         command = 'ssh -tA {username}@{hostname} {ssh_command}'.format(
                   username=username, hostname=hostname, ssh_command=ssh_command)
+        if connect:
+            subprocess.call(command.split())
+        click.secho('You can now access your server with the following command:')
         click.secho(command)
         if clip:
             click.secho('\nOr just check your clipboard and run ctrl/command + v (requires package "xclip" on Linux)')
@@ -186,8 +189,9 @@ def cli(ctx, config_file):
               type=click.IntRange(1, 525600, clamp=True))
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
 @click.option('--clip', is_flag=True, help='Copy SSH command into clipboard', default=False)
+@click.option('--connect', is_flag=True, help='Directly connect to the host', default=False)
 @click.pass_obj
-def request_access(obj, host, user, password, even_url, odd_host, reason, reason_cont, insecure, lifetime, clip):
+def request_access(obj, host, user, password, even_url, odd_host, reason, reason_cont, insecure, lifetime, clip, connect):
     '''Request SSH access to a single host'''
 
     user = user or os.getenv('USER')
@@ -257,7 +261,7 @@ def request_access(obj, host, user, password, even_url, odd_host, reason, reason
         remote_host = None
 
     return_code = _request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime,
-                                  user, password, clip)
+                                  user, password, clip, connect)
 
     if return_code != 200:
         sys.exit(return_code)
