@@ -87,3 +87,66 @@ def test_oauth_failure(monkeypatch):
 
     assert result.exit_code == 500
     assert 'Server error: **MAGIC-FAIL**' in result.output
+
+def test_login_arg_user(monkeypatch, tmpdir):
+    arg_user = 'arg_user'
+    zign_user = 'zign_user'
+    env_user = 'env_user'
+
+    response = MagicMock()
+
+    runner = CliRunner()
+
+    def mock__request_access(even_url, cacert, username, first_host, reason,
+                           remote_host, lifetime, user, password, clip):
+        assert arg_user == username
+
+    monkeypatch.setattr('zign.api.get_config', lambda: {'user': zign_user})
+    monkeypatch.setattr('os.getenv', lambda x: env_user)
+    monkeypatch.setattr('piu.cli._request_access', mock__request_access)
+    monkeypatch.setattr('requests.get', lambda x, timeout: response)
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '-U', arg_user],
+                catch_exceptions=False)
+
+
+def test_login_zign_user(monkeypatch, tmpdir):
+    zign_user = 'zign_user'
+    env_user = 'env_user'
+
+    response = MagicMock()
+
+    runner = CliRunner()
+
+    def mock__request_access(even_url, cacert, username, first_host, reason,
+                          remote_host, lifetime, user, password, clip):
+        assert zign_user == username
+
+    monkeypatch.setattr('zign.api.get_config', lambda: {'user': zign_user})
+    monkeypatch.setattr('os.getenv', lambda: env_user)
+    monkeypatch.setattr('piu.cli._request_access', mock__request_access)
+    monkeypatch.setattr('requests.get', lambda x, timeout: response)
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access'], catch_exceptions=False)
+
+
+def test_login_env_user(monkeypatch, tmpdir):
+    env_user = 'env_user'
+
+    response = MagicMock()
+
+    runner = CliRunner()
+
+    def mock__request_access(even_url, cacert, username, first_host, reason,
+                          remote_host, lifetime, user, password, clip):
+        assert env_user == username
+
+    monkeypatch.setattr('zign.api.get_config', lambda: {'user': ''})
+    monkeypatch.setattr('os.getenv', lambda x: env_user)
+    monkeypatch.setattr('piu.cli._request_access', mock__request_access)
+    monkeypatch.setattr('requests.get', lambda x, timeout: response)
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access'], catch_exceptions=False)

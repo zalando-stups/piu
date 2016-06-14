@@ -190,7 +190,7 @@ def cli(ctx, config_file):
 def request_access(obj, host, user, password, even_url, odd_host, reason, reason_cont, insecure, lifetime, clip):
     '''Request SSH access to a single host'''
 
-    user = user or os.getenv('USER')
+    user = user or zign.api.get_config().get('user') or os.getenv('USER')
 
     parts = host.split('@')
     if len(parts) > 1:
