@@ -191,7 +191,8 @@ def cli(ctx, config_file):
 @click.option('--clip', is_flag=True, help='Copy SSH command into clipboard', default=False)
 @click.option('--connect', is_flag=True, help='Directly connect to the host', default=False)
 @click.pass_obj
-def request_access(obj, host, user, password, even_url, odd_host, reason, reason_cont, insecure, lifetime, clip, connect):
+def request_access(obj, host, user, password, even_url, odd_host, reason, reason_cont, insecure, lifetime,
+                   clip, connect):
     '''Request SSH access to a single host'''
 
     user = user or os.getenv('USER')
