@@ -18,7 +18,7 @@ import time
 import yaml
 import zign.api
 
-from clickclick import error, AliasedGroup, print_table, OutputFormat, choice
+from clickclick import error, AliasedGroup, print_table, OutputFormat
 from .error_handling import handle_exceptions
 
 import piu
