@@ -5,18 +5,21 @@ Helper script to request access to a certain host.
 
 import click
 import datetime
+import operator
 import ipaddress
 import json
 import os
 import subprocess
 import requests
+import boto3
 import socket
 import sys
 import time
 import yaml
 import zign.api
 
-from clickclick import error, AliasedGroup, print_table, OutputFormat
+from clickclick import error, AliasedGroup, print_table, OutputFormat, choice
+from .error_handling import handle_exceptions
 
 import piu
 
@@ -177,9 +180,9 @@ def cli(ctx, config_file):
 
 
 @cli.command('request-access')
-@click.argument('host', metavar='[USER]@HOST')
-@click.argument('reason')
-@click.argument('reason_cont', nargs=-1, metavar='[..]')
+@click.argument('host', metavar='[USER]@HOST', required=False)
+@click.argument('reason', required=False)
+@click.argument('reason_cont', nargs=-1, metavar='[..]', required=False)
 @click.option('-U', '--user', help='Username to use for OAuth2 authentication', envvar='PIU_USER', metavar='NAME')
 @click.option('-p', '--password', help='Password to use for OAuth2 authentication',
               envvar='PIU_PASSWORD', metavar='PWD')
@@ -187,13 +190,47 @@ def cli(ctx, config_file):
 @click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
 @click.option('-t', '--lifetime', help='Lifetime of the SSH access request in minutes (default: 60)',
               type=click.IntRange(1, 525600, clamp=True))
+@click.option('--interactive', help='Offers assistance', envvar='PIU_INTERACTIVE', is_flag=True, default=False)
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
-@click.option('--clip', is_flag=True, help='Copy SSH command into clipboard', default=False)
-@click.option('--connect', is_flag=True, help='Directly connect to the host', default=False)
+@click.option('--clip', help='Copy SSH command into clipboard', is_flag=True, default=False)
+@click.option('--connect', help='Directly connect to the host', envvar='PIU_CONNECT', is_flag=True, default=False)
 @click.pass_obj
-def request_access(obj, host, user, password, even_url, odd_host, reason, reason_cont, insecure, lifetime,
-                   clip, connect):
+def request_access(obj, host, reason, reason_cont, user, password, even_url, odd_host, lifetime, interactive,
+                   insecure, clip, connect):
     '''Request SSH access to a single host'''
+
+    if interactive:
+        ec2 = boto3.resource('ec2')
+        reservations = ec2.instances.filter(
+                       Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])
+        stack_name = stack_version = None
+        instance_list = []
+        for r in reservations:
+            tags = r.tags
+            if not tags:
+                continue
+            for d in tags:
+                d_k, d_v = d['Key'], d['Value']
+                if d_k == 'StackName':
+                    stack_name = d_v
+                elif d_k == 'StackVersion':
+                    stack_version = d_v
+            if stack_name and stack_version:
+                instance_list.append({'stack_name': stack_name, 'stack_version': stack_version,
+                                      'instance_id': r.instance_id, 'private_ip': r.private_ip_address})
+        instance_count = len(instance_list)
+        sorted_instance_list = sorted(instance_list, key=operator.itemgetter('stack_name', 'stack_version'))
+        {d.update({'index': idx}) for idx, d in enumerate(sorted_instance_list, start=1)}
+        print_table('index stack_name stack_version private_ip instance_id'.split(), sorted_instance_list)
+        allowed_choices = ["{}".format(n) for n in range(1, instance_count + 1)]
+        instance_index = int(click.prompt('Choose an instance (1-{})'.format(instance_count),
+                             type=click.Choice(allowed_choices))) - 1
+        host = sorted_instance_list[instance_index]['private_ip']
+        reason = click.prompt('Reason', default='Troubleshooting')
+    elif not host:
+        raise click.UsageError('Missing argument "host".')
+    elif not reason:
+        raise click.UsageError('Missing argument "reason".')
 
     user = user or zign.api.get_config().get('user') or os.getenv('USER')
 
@@ -307,7 +344,7 @@ def list_access_requests(obj, user, odd_host, status, limit, offset, output):
 
 
 def main():
-    cli()
+    handle_exceptions(cli)()
 
 if __name__ == '__main__':
     main()
