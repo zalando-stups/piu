@@ -165,7 +165,7 @@ def test_interactive_success(monkeypatch):
     monkeypatch.setattr('piu.cli._request_access', MagicMock(side_effect=request_access))
 
     runner = CliRunner()
-    input_stream = '\n'.join(['eu-west-1', '1', 'Troubleshooting'])
+    input_stream = '\n'.join(['eu-west-1', '1', 'Troubleshooting']) + '\n'
 
     with runner.isolated_filesystem():
         result = runner.invoke(cli, ['request-access', '--interactive'], input=input_stream, catch_exceptions=False)
