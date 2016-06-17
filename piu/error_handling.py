@@ -17,7 +17,7 @@ def store_exception(exception: Exception) -> str:
 
     content = ''.join(tracebacks)
 
-    with NamedTemporaryFile(prefix="senza-traceback-", delete=False) as error_file:
+    with NamedTemporaryFile(prefix="piu-traceback-", delete=False) as error_file:
         file_name = error_file.name
         error_file.write(content.encode())
 
