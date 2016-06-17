@@ -280,8 +280,8 @@ def request_access(obj, host, reason, reason_cont, user, password, even_url, odd
 
 
 def request_access_interactive():
-    region_name = click.prompt('AWS region', default=os.getenv('PIU_REGION') or 
-                  subprocess.getoutput('aws configure get region'))
+    region_name = click.prompt('AWS region', default=os.getenv('PIU_REGION') or
+                               subprocess.getoutput('aws configure get region'))
     ec2 = boto3.resource('ec2', region_name=region_name)
     reservations = ec2.instances.filter(
                    Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])
