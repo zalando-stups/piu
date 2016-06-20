@@ -6,6 +6,7 @@ Helper script to request access to a certain host.
 import click
 import datetime
 import operator
+import configparser
 import ipaddress
 import json
 import os
@@ -279,11 +280,24 @@ def request_access(obj, host, reason, reason_cont, user, password, even_url, odd
         sys.exit(return_code)
 
 
+def get_region():
+    aws_default_region_envvar = os.getenv('AWS_DEFAULT_REGION')
+    if aws_default_region_envvar:
+        return aws_default_region_envvar
+    
+    config = configparser.ConfigParser()
+    try:
+        config.read(os.path.expanduser('~/.aws/config'))
+        if 'default' in config:
+            region = config['default']['region']
+            return region
+    except:
+        return ''
+
+
 def request_access_interactive():
-    region_name = os.getenv('PIU_REGION') or \
-                            click.prompt('AWS region',
-                                         default=subprocess.getoutput('aws configure get region'))
-    ec2 = boto3.resource('ec2', region_name=region_name)
+    region = click.prompt('AWS region', default=get_region())
+    ec2 = boto3.resource('ec2', region_name=region)
     reservations = ec2.instances.filter(
                    Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])
     name = stack_name = stack_version = None
