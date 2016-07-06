@@ -284,7 +284,7 @@ def get_region():
     aws_default_region_envvar = os.getenv('AWS_DEFAULT_REGION')
     if aws_default_region_envvar:
         return aws_default_region_envvar
-    
+
     config = configparser.ConfigParser()
     try:
         config.read(os.path.expanduser('~/.aws/config'))
