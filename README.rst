@@ -42,6 +42,13 @@ See the `STUPS documentation on Più`_ for details.
 
 .. _STUPS documentation on Più: http://stups.readthedocs.org/en/latest/components/piu.html
 
+Running Unit Tests
+==================
+
+.. code-block:: bash
+
+    $ python3 setup.py test --cov-html=true
+
 Releasing
 =========
 
