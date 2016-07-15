@@ -168,6 +168,6 @@ def test_interactive_success(monkeypatch):
     input_stream = '\n'.join(['eu-west-1', '1', 'Troubleshooting']) + '\n'
 
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['request-access', '--interactive'], input=input_stream, catch_exceptions=False)
+        result = runner.invoke(cli, ['request-access', '--interactive', '--even-url=https://localhost/', '--odd-host=odd.example.org'], input=input_stream, catch_exceptions=False)
 
     assert request_access.called
