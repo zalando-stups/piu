@@ -194,7 +194,7 @@ def test_interactive_single_instance_success(monkeypatch):
 
 
 
-def test_interactive_empty(monkeypatch):
+def test_interactive_no_instances_failure(monkeypatch):
     ec2 = MagicMock()
     request_access = MagicMock()
 
