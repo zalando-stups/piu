@@ -318,6 +318,8 @@ def request_access_interactive():
             instance_list.append({'name': name, 'stack_name': stack_name, 'stack_version': stack_version,
                                   'instance_id': r.instance_id, 'private_ip': r.private_ip_address})
     instance_count = len(instance_list)
+    if instance_count == 0:
+        raise click.ClickException('No running instances were found.')
     sorted_instance_list = sorted(instance_list, key=operator.itemgetter('stack_name', 'stack_version'))
     {d.update({'index': idx}) for idx, d in enumerate(sorted_instance_list, start=1)}
     print()

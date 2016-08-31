@@ -171,3 +171,23 @@ def test_interactive_success(monkeypatch):
         result = runner.invoke(cli, ['request-access', '--interactive', '--even-url=https://localhost/', '--odd-host=odd.example.org'], input=input_stream, catch_exceptions=False)
 
     assert request_access.called
+
+
+def test_interactive_empty(monkeypatch):
+    ec2 = MagicMock()
+    request_access = MagicMock()
+
+    response = []
+    ec2.instances.filter = MagicMock(return_value=response)
+    boto3 = MagicMock()
+    monkeypatch.setattr('boto3.resource', MagicMock(return_value=ec2))
+    monkeypatch.setattr('piu.cli._request_access', MagicMock(side_effect=request_access))
+
+    runner = CliRunner()
+    input_stream = '\neu-west-1\n'
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '--interactive', '--even-url=https://localhost/', '--odd-host=odd.example.org'], input=input_stream, catch_exceptions=False)
+
+    assert result.exception
+    assert 'Error: No running instances were found.' in result.output
