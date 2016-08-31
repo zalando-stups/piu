@@ -173,6 +173,27 @@ def test_interactive_success(monkeypatch):
     assert request_access.called
 
 
+def test_interactive_single_instance_success(monkeypatch):
+    ec2 = MagicMock()
+    request_access = MagicMock()
+
+    response = []
+    response.append(MagicMock(**{'instance_id': 'i-123456', 'private_ip_address': '172.31.10.10', 'tags': [{'Key': 'Name', 'Value': 'stack1-0o1o0'}, {'Key': 'StackVersion', 'Value': '0o1o0'}, {'Key': 'StackName', 'Value': 'stack1'}]}))
+    ec2.instances.filter = MagicMock(return_value=response)
+    boto3 = MagicMock()
+    monkeypatch.setattr('boto3.resource', MagicMock(return_value=ec2))
+    monkeypatch.setattr('piu.cli._request_access', MagicMock(side_effect=request_access))
+
+    runner = CliRunner()
+    input_stream = '\n'.join(['eu-west-1', '', 'Troubleshooting']) + '\n'
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '--interactive', '--even-url=https://localhost/', '--odd-host=odd.example.org'], input=input_stream, catch_exceptions=False)
+
+    assert request_access.called
+
+
+
 def test_interactive_empty(monkeypatch):
     ec2 = MagicMock()
     request_access = MagicMock()
