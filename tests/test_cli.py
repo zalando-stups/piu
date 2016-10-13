@@ -193,7 +193,6 @@ def test_interactive_single_instance_success(monkeypatch):
     assert request_access.called
 
 
-
 def test_interactive_no_instances_failure(monkeypatch):
     ec2 = MagicMock()
     request_access = MagicMock()
@@ -212,3 +211,42 @@ def test_interactive_no_instances_failure(monkeypatch):
 
     assert result.exception
     assert 'Error: No running instances were found.' in result.output
+
+def test_tunnel_either_connect_or_tunnel():
+    input_stream = '\neu-central-1\n'
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '--connect', '--tunnel', 'myuser@somehost.example.org', 'Testing'], input=input_stream, catch_exceptions=False)
+    assert result.exception
+    assert 'Cannot specify both "connect" and "tunnel"'
+
+def test_tunnel_should_have_correct_format():
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '--tunnel','a2345:234a', 'myuser@somehost.example.org', 'Testing'], catch_exceptions=False)
+    assert result.exception
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '--tunnel','23434', 'myuser@somehost.example.org', 'Testing'], catch_exceptions=False)
+    assert result.exception
+
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '--tunnel','a2345:2343', 'myuser@somehost.example.org', 'Testing'], catch_exceptions=False)
+    assert result.exception
+
+def test_tunnel_success(monkeypatch):
+
+    response = MagicMock(status_code=200, text='**MAGIC-SUCCESS**')
+
+    monkeypatch.setattr('zign.api.get_named_token', MagicMock(return_value={'access_token': '123'}))
+    monkeypatch.setattr('requests.post', MagicMock(return_value=response))
+    monkeypatch.setattr('subprocess.call', MagicMock())
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli, ['request-access', '--tunnel','2380:2379', 'myuser@somehost.example.org', 'Testing'], catch_exceptions=False)
+
+    assert response.text in result.output
+    assert '-L 2380:somehost.example.org:2379' in result.output

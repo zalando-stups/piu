@@ -18,6 +18,7 @@ import sys
 import time
 import yaml
 import zign.api
+import re
 
 from clickclick import error, AliasedGroup, print_table, OutputFormat
 from .error_handling import handle_exceptions
@@ -128,7 +129,15 @@ def print_version(ctx, param, value):
     ctx.exit()
 
 
-def _request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, user, password, clip, connect):
+def tunnel_validation(ctx, param, value):
+    if value and not re.match("^[0-9]{1,5}:[0-9]{1,5}$", value):
+        raise click.BadParameter('Tunnel needs to be in format localPort:remotePort')
+    else:
+        return value
+
+
+def _request_access(even_url, cacert, username, hostname, reason, remote_host,
+                    lifetime, user, password, clip, connect, tunnel):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
     host_via = hostname
     if remote_host:
@@ -154,12 +163,18 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host, l
         ssh_command = ''
         if remote_host:
             ssh_command = 'ssh -o StrictHostKeyChecking=no {username}@{remote_host}'.format(**vars())
+            if tunnel:
+                ports = tunnel.split(':')
+                ssh_command = '-L {local_port}:{remote_host}:{remote_port}'.format(
+                    local_port=ports[0], remote_host=remote_host, remote_port=ports[1])
         command = 'ssh -tA {username}@{hostname} {ssh_command}'.format(
                   username=username, hostname=hostname, ssh_command=ssh_command)
-        if connect:
+        if connect or tunnel:
             subprocess.call(command.split())
-        click.secho('You can now access your server with the following command:')
+
+        click.secho('You can access your server with the following command:')
         click.secho(command)
+
         if clip:
             click.secho('\nOr just check your clipboard and run ctrl/command + v (requires package "xclip" on Linux)')
             if pyperclip is not None:
@@ -195,9 +210,10 @@ def cli(ctx, config_file):
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
 @click.option('--clip', help='Copy SSH command into clipboard', is_flag=True, default=False)
 @click.option('--connect', help='Directly connect to the host', envvar='PIU_CONNECT', is_flag=True, default=False)
+@click.option('--tunnel', help='Tunnel to the host', envvar='PIU_TUNNEL', callback=tunnel_validation, metavar='LOCALPORT:REMOTEPORT')
 @click.pass_obj
 def request_access(obj, host, reason, reason_cont, user, password, even_url, odd_host, lifetime, interactive,
-                   insecure, clip, connect):
+                   insecure, clip, connect, tunnel):
     '''Request SSH access to a single host'''
 
     if interactive:
@@ -206,6 +222,9 @@ def request_access(obj, host, reason, reason_cont, user, password, even_url, odd
         raise click.UsageError('Missing argument "host".')
     if not reason:
         raise click.UsageError('Missing argument "reason".')
+
+    if connect and tunnel:
+        raise click.UsageError('Cannot specify both "connect" and "tunnel"')
 
     user = user or zign.api.get_config().get('user') or os.getenv('USER')
 
@@ -274,7 +293,7 @@ def request_access(obj, host, reason, reason_cont, user, password, even_url, odd
         remote_host = None
 
     return_code = _request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime,
-                                  user, password, clip, connect)
+                                  user, password, clip, connect, tunnel)
 
     if return_code != 200:
         sys.exit(return_code)
@@ -328,7 +347,7 @@ def request_access_interactive():
     if instance_count > 1:
         allowed_choices = ["{}".format(n) for n in range(1, instance_count + 1)]
         instance_index = int(click.prompt('Choose an instance (1-{})'.format(instance_count),
-                             type=click.Choice(allowed_choices))) - 1
+                                          type=click.Choice(allowed_choices))) - 1
     else:
         click.confirm('Connect to {}?'.format(sorted_instance_list[0]['name']), default=True, abort=True)
         instance_index = 0
