@@ -246,7 +246,8 @@ def test_tunnel_success(monkeypatch):
 
     runner = CliRunner()
     with runner.isolated_filesystem():
-        result = runner.invoke(cli, ['request-access', '--tunnel','2380:2379', 'myuser@somehost.example.org', 'Testing'], catch_exceptions=False)
+        result = runner.invoke(cli, ['request-access', '--tunnel','2380:2379', '--even-url=https://localhost/', 
+                '--odd-host=odd.example.org', 'myuser@somehost.example.org', 'Testing'], catch_exceptions=False)
 
     assert response.text in result.output
     assert '-L 2380:somehost.example.org:2379' in result.output

@@ -210,7 +210,8 @@ def cli(ctx, config_file):
 @click.option('--insecure', help='Do not verify SSL certificate', is_flag=True, default=False)
 @click.option('--clip', help='Copy SSH command into clipboard', is_flag=True, default=False)
 @click.option('--connect', help='Directly connect to the host', envvar='PIU_CONNECT', is_flag=True, default=False)
-@click.option('--tunnel', help='Tunnel to the host', envvar='PIU_TUNNEL', callback=tunnel_validation, metavar='LOCALPORT:REMOTEPORT')
+@click.option('--tunnel', help='Tunnel to the host', envvar='PIU_TUNNEL',
+              callback=tunnel_validation, metavar='LOCALPORT:REMOTEPORT')
 @click.pass_obj
 def request_access(obj, host, reason, reason_cont, user, password, even_url, odd_host, lifetime, interactive,
                    insecure, clip, connect, tunnel):
