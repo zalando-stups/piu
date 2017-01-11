@@ -137,7 +137,7 @@ def tunnel_validation(ctx, param, value):
 
 
 def _request_access(even_url, cacert, username, hostname, reason, remote_host,
-                    lifetime, user, password, clip, connect, tunnel):
+                    lifetime, clip, connect, tunnel):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
     host_via = hostname
     if remote_host:
@@ -198,9 +198,6 @@ def cli(ctx, config_file):
 @click.argument('host', metavar='[USER]@HOST', required=False)
 @click.argument('reason', required=False)
 @click.argument('reason_cont', nargs=-1, metavar='[..]', required=False)
-@click.option('-U', '--user', help='Username to use for OAuth2 authentication', envvar='PIU_USER', metavar='NAME')
-@click.option('-p', '--password', help='Password to use for OAuth2 authentication',
-              envvar='PIU_PASSWORD', metavar='PWD')
 @click.option('-E', '--even-url', help='Even SSH Access Granting Service URL', envvar='EVEN_URL', metavar='URI')
 @click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
 @click.option('-t', '--lifetime', help='Lifetime of the SSH access request in minutes (default: 60)',
@@ -212,7 +209,7 @@ def cli(ctx, config_file):
 @click.option('--tunnel', help='Tunnel to the host', envvar='PIU_TUNNEL',
               callback=tunnel_validation, metavar='LOCALPORT:REMOTEPORT')
 @click.pass_obj
-def request_access(obj, host, reason, reason_cont, user, password, even_url, odd_host, lifetime, interactive,
+def request_access(obj, host, reason, reason_cont, even_url, odd_host, lifetime, interactive,
                    insecure, clip, connect, tunnel):
     '''Request SSH access to a single host'''
 
@@ -226,13 +223,11 @@ def request_access(obj, host, reason, reason_cont, user, password, even_url, odd
     if connect and tunnel:
         raise click.UsageError('Cannot specify both "connect" and "tunnel"')
 
-    user = user or zign.api.get_config().get('user') or os.getenv('USER')
-
     parts = host.split('@')
     if len(parts) > 1:
         username = parts[0]
     else:
-        username = user
+        username = zign.api.get_config().get('user') or os.getenv('USER')
 
     hostname = parts[-1]
 
@@ -293,7 +288,7 @@ def request_access(obj, host, reason, reason_cont, user, password, even_url, odd
         remote_host = None
 
     return_code = _request_access(even_url, cacert, username, first_host, reason, remote_host, lifetime,
-                                  user, password, clip, connect, tunnel)
+                                  clip, connect, tunnel)
 
     if return_code != 200:
         sys.exit(return_code)
