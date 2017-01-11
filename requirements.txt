@@ -2,6 +2,6 @@ clickclick>=0.10
 PyYAML
 requests
 pyperclip
-stups-zign>=1.0.24
+stups-zign>=1.1.26
 boto3>=1.3.0
 botocore>=1.4.10
