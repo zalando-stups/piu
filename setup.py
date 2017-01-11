@@ -22,6 +22,7 @@ def read_version(package):
         exec(fd.read(), data)
     return data['__version__']
 
+
 NAME = 'stups-piu'
 MAIN_PACKAGE = 'piu'
 VERSION = read_version(MAIN_PACKAGE)
