@@ -146,12 +146,11 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host,
     if lifetime:
         data['lifetime_minutes'] = lifetime
     try:
-        token = zign.api.get_named_token(['uid'], 'employees', 'piu', user, password, prompt=True)
+        access_token = zign.api.get_token("piu", ['uid'])
     except zign.api.ServerError as e:
         click.secho('{}'.format(e), fg='red', bold=True)
         return 500
 
-    access_token = token.get('access_token')
     click.secho('Requesting access to host {host_via} for {username}..'.format(host_via=host_via, username=username),
                 bold=True)
     r = requests.post(even_url, headers={'Content-Type': 'application/json',
@@ -397,6 +396,7 @@ def list_access_requests(obj, user, odd_host, status, limit, offset, output):
 
 def main():
     handle_exceptions(cli)()
+
 
 if __name__ == '__main__':
     main()
