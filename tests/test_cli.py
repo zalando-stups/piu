@@ -16,7 +16,7 @@ def test_missing_reason():
 
 def test_success(monkeypatch):
     response = MagicMock(status_code=200, text='**MAGIC-SUCCESS**')
-    monkeypatch.setattr('zign.api.get_named_token', MagicMock(return_value={'access_token': '123'}))
+    monkeypatch.setattr('zign.api.get_token_implicit_flow', MagicMock(return_value={'access_token': '123'}))
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
     monkeypatch.setattr('keyring.set_password', MagicMock())
     runner = CliRunner()
@@ -36,7 +36,7 @@ def test_success(monkeypatch):
 
 def test_bad_request(monkeypatch):
     response = MagicMock(status_code=400, text='**MAGIC-BAD-REQUEST**')
-    monkeypatch.setattr('zign.api.get_named_token', MagicMock(return_value={'access_token': '123'}))
+    monkeypatch.setattr('zign.api.get_token_implicit_flow', MagicMock(return_value={'access_token': '123'}))
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
     monkeypatch.setattr('keyring.set_password', MagicMock())
     runner = CliRunner()
@@ -57,7 +57,7 @@ def test_bad_request(monkeypatch):
 
 def test_auth_failure(monkeypatch):
     response = MagicMock(status_code=403, text='**MAGIC-AUTH-FAILED**')
-    monkeypatch.setattr('zign.api.get_named_token', MagicMock(return_value={'access_token': '123'}))
+    monkeypatch.setattr('zign.api.get_token_implicit_flow', MagicMock(return_value={'access_token': '123'}))
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
     monkeypatch.setattr('keyring.set_password', MagicMock())
     runner = CliRunner()
@@ -77,7 +77,7 @@ def test_auth_failure(monkeypatch):
 
 def test_dialog(monkeypatch):
     response = MagicMock(status_code=200, text='**MAGIC-SUCCESS**')
-    monkeypatch.setattr('zign.api.get_named_token', MagicMock(return_value={'access_token': '123'}))
+    monkeypatch.setattr('zign.api.get_token_implicit_flow', MagicMock(return_value={'access_token': '123'}))
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
     monkeypatch.setattr('requests.get', MagicMock(return_value=response))
     monkeypatch.setattr('socket.getaddrinfo', MagicMock())
@@ -95,7 +95,8 @@ def test_dialog(monkeypatch):
 
 def test_oauth_failure(monkeypatch):
     response = MagicMock(status_code=200, text='**MAGIC-SUCCESS**')
-    monkeypatch.setattr('zign.api.get_named_token', MagicMock(side_effect=zign.api.ServerError('**MAGIC-FAIL**')))
+    monkeypatch.setattr('zign.api.get_token_implicit_flow',
+                        MagicMock(side_effect=zign.api.AuthenticationFailed('fail')))
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
     monkeypatch.setattr('requests.get', MagicMock(return_value=response))
     monkeypatch.setattr('socket.getaddrinfo', MagicMock())
@@ -107,8 +108,8 @@ def test_oauth_failure(monkeypatch):
         result = runner.invoke(cli, ['--config-file=config.yaml', 'req', 'myuser@172.31.0.1',
                                      'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
 
-    assert result.exit_code == 500
-    assert 'Server error: **MAGIC-FAIL**' in result.output
+    assert result.exit_code == 1
+    assert 'Authentication failed' in result.output
 
 
 def test_login_arg_user(monkeypatch, tmpdir):
@@ -305,7 +306,7 @@ def test_tunnel_success(monkeypatch):
 
     response = MagicMock(status_code=200, text='**MAGIC-SUCCESS**')
 
-    monkeypatch.setattr('zign.api.get_named_token', MagicMock(return_value={'access_token': '123'}))
+    monkeypatch.setattr('zign.api.get_token_implicit_flow', MagicMock(return_value={'access_token': '123'}))
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
     monkeypatch.setattr('subprocess.call', MagicMock())
 

@@ -136,6 +136,13 @@ def tunnel_validation(ctx, param, value):
         return value
 
 
+def get_token():
+    try:
+        return zign.api.get_token_implicit_flow('piu')
+    except zign.api.AuthenticationFailed as e:
+        raise click.ClickException(e)
+
+
 def _request_access(even_url, cacert, username, hostname, reason, remote_host,
                     lifetime, user, password, clip, connect, tunnel):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
@@ -145,12 +152,8 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host,
         host_via = '{} via {}'.format(remote_host, hostname)
     if lifetime:
         data['lifetime_minutes'] = lifetime
-    try:
-        token = zign.api.get_named_token(['uid'], 'employees', 'piu', user, password, prompt=True)
-    except zign.api.ServerError as e:
-        click.secho('{}'.format(e), fg='red', bold=True)
-        return 500
 
+    token = get_token()
     access_token = token.get('access_token')
     click.secho('Requesting access to host {host_via} for {username}..'.format(host_via=host_via, username=username),
                 bold=True)
@@ -378,7 +381,7 @@ def list_access_requests(obj, user, odd_host, status, limit, offset, output):
     elif odd_host == 'MY-ODD-HOST':
         odd_host = config.get('odd_host')
 
-    access_token = zign.api.get_token('piu', ['piu'])
+    access_token = get_token()
 
     params = {'username': user, 'hostname': odd_host, 'status': status, 'limit': limit, 'offset': offset}
     r = requests.get(config.get('even_url').rstrip('/') + '/access-requests',
@@ -397,6 +400,7 @@ def list_access_requests(obj, user, odd_host, status, limit, offset, output):
 
 def main():
     handle_exceptions(cli)()
+
 
 if __name__ == '__main__':
     main()
