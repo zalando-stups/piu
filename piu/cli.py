@@ -317,17 +317,17 @@ def request_access_interactive():
     name = stack_name = stack_version = None
     instance_list = []
     for r in reservations:
-        tags = r.tags
-        if not tags:
+        name = stack_name = stack_version = None
+        if not r.tags:
             continue
-        for d in tags:
-            d_k, d_v = d['Key'], d['Value']
-            if d_k == 'Name':
-                name = d_v
-            elif d_k == 'StackName':
-                stack_name = d_v
-            elif d_k == 'StackVersion':
-                stack_version = d_v
+        for tag in r.tags:
+            tag_key, tag_value = tag['Key'], tag['Value']
+            if tag_key == 'Name':
+                name = tag_value
+            elif tag_key == 'StackName':
+                stack_name = tag_value
+            elif tag_key == 'StackVersion':
+                stack_version = tag_value
         if name and stack_name and stack_version:
             instance_list.append({'name': name, 'stack_name': stack_name, 'stack_version': stack_version,
                                   'instance_id': r.instance_id, 'private_ip': r.private_ip_address})
