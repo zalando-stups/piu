@@ -119,6 +119,35 @@ def mock_request_access(monkeypatch, expected_user=None, expected_odd_host=None)
     monkeypatch.setattr('piu.cli._request_access', mock_fn)
 
 
+def test_bastion_arg_host(monkeypatch):
+    monkeypatch.setattr('piu.cli.load_config', lambda _: {"even_url": "https://even.example.org",
+                                                          "odd_host": "odd-config.example.org"})
+
+    mock_request_access(monkeypatch, expected_odd_host='odd-arg.example.org')
+
+    expect_success(['request-access', '-O', 'odd-arg.example.org', 'user@host.example.org', 'reason'],
+                   catch_exceptions=False)
+
+
+def test_bastion_autodetect_host(monkeypatch):
+    monkeypatch.setattr('piu.utils.find_odd_host', lambda region: "odd-auto.example.org")
+    monkeypatch.setattr('piu.cli.load_config', lambda file: {"even_url": "https://even.example.org",
+                                                             "odd_host": "odd-config.example.org"})
+
+    mock_request_access(monkeypatch, expected_odd_host='odd-auto.example.org')
+
+    expect_success(['request-access', 'user@host.example.org', 'reason'], catch_exceptions=False)
+
+
+def test_bastion_config_host(monkeypatch):
+    monkeypatch.setattr('piu.cli.load_config', lambda file: {"even_url": "https://even.example.org",
+                                                             "odd_host": "odd-config.example.org"})
+
+    mock_request_access(monkeypatch, expected_odd_host='odd-config.example.org')
+
+    expect_success(['request-access', 'user@host.example.org', 'reason'], catch_exceptions=False)
+
+
 def test_login_zign_user(monkeypatch):
     zign_user = 'zign_user'
     env_user = 'env_user'
