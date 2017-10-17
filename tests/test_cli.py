@@ -3,6 +3,14 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock
 import zign.api
 from piu.cli import cli
+import pytest
+
+
+@pytest.yield_fixture(autouse=True)
+def mock_aws(monkeypatch):
+  monkeypatch.setattr('piu.utils.current_region', lambda: 'eu-central-1')
+  monkeypatch.setattr('piu.utils.find_odd_host', lambda region: None)
+  yield
 
 
 def test_missing_reason():
@@ -186,7 +194,7 @@ def test_interactive_success(monkeypatch):
     monkeypatch.setattr('piu.cli._request_access', MagicMock(side_effect=request_access))
 
     runner = CliRunner()
-    input_stream = '\n'.join(['eu-west-1', '1', 'Troubleshooting']) + '\n'
+    input_stream = '\n'.join(['eu-west-1', 'odd-eu-west-1.test.example.org', '1', 'Troubleshooting']) + '\n'
 
     with runner.isolated_filesystem():
         runner.invoke(cli,
