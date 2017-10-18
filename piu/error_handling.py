@@ -34,7 +34,7 @@ def handle_exceptions(func):
         try:
             func()
         except NoCredentialsError as e:
-            print('No AWS credentials found. Use the "mai" command-line tool to get a temporary access key\n'
+            print('No AWS credentials found. Use the "zaws" command-line tool to get a temporary access key\n'
                   'or manually configure either ~/.aws/credentials or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.',
                   file=sys.stderr)
             sys.exit(1)
@@ -42,7 +42,7 @@ def handle_exceptions(func):
             sys.stdout.flush()
             if is_credentials_expired_error(e):
                 print('AWS credentials have expired.\n'
-                      'Use the "mai" command line tool to get a new temporary access key.',
+                      'Use the "zaws" command line tool to get a new temporary access key.',
                       file=sys.stderr)
                 sys.exit(1)
             else:
