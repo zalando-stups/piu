@@ -3,7 +3,6 @@
 Helper script to request access to a certain host.
 '''
 
-import boto3
 import click
 import datetime
 import operator
@@ -302,42 +301,33 @@ def request_access_interactive(region, odd_host):
     region = click.prompt('AWS region', default=region)
     odd_host = click.prompt('Odd SSH bastion hostname', default=odd_host)
 
-    ec2 = boto3.resource('ec2', region_name=region)
-    reservations = ec2.instances.filter(
-                   Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])
-    name = stack_name = stack_version = None
-    instance_list = []
-    for r in reservations:
-        name = stack_name = stack_version = None
-        if not r.tags:
-            continue
-        for tag in r.tags:
-            tag_key, tag_value = tag['Key'], tag['Value']
-            if tag_key == 'Name':
-                name = tag_value
-            elif tag_key == 'StackName':
-                stack_name = tag_value
-            elif tag_key == 'StackVersion':
-                stack_version = tag_value
-        if name and stack_name and stack_version:
-            instance_list.append({'name': name, 'stack_name': stack_name, 'stack_version': stack_version,
-                                  'instance_id': r.instance_id, 'private_ip': r.private_ip_address})
-    instance_count = len(instance_list)
+    all_instances = piu.utils.list_running_instances(region, [])
+
+    stack_instances = [instance for instance in all_instances
+                       if instance.name and instance.stack_name and instance.stack_version]
+
+    instance_count = len(stack_instances)
     if instance_count == 0:
         raise click.ClickException('No running instances were found.')
-    sorted_instance_list = sorted(instance_list, key=operator.itemgetter('stack_name', 'stack_version'))
-    {d.update({'index': idx}) for idx, d in enumerate(sorted_instance_list, start=1)}
+
+    stack_instances.sort(key=operator.attrgetter('stack_name', 'stack_version'))
+
     print()
-    print_table('index name stack_name stack_version private_ip instance_id'.split(), sorted_instance_list)
+    table_entries = [dict(index=idx, **instance._asdict()) for idx, instance in enumerate(stack_instances, start=1)]
+    print_table(
+        'index name stack_name stack_version private_ip instance_id'.split(),
+        table_entries)
     print()
+
     if instance_count > 1:
         allowed_choices = ["{}".format(n) for n in range(1, instance_count + 1)]
         instance_index = int(click.prompt('Choose an instance (1-{})'.format(instance_count),
                                           type=click.Choice(allowed_choices))) - 1
     else:
-        click.confirm('Connect to {}?'.format(sorted_instance_list[0]['name']), default=True, abort=True)
+        click.confirm('Connect to {}?'.format(stack_instances[0].name), default=True, abort=True)
         instance_index = 0
-    host = sorted_instance_list[instance_index]['private_ip']
+
+    host = stack_instances[instance_index].private_ip
     reason = click.prompt('Reason', default='Troubleshooting')
     return (host, odd_host, reason)
 
