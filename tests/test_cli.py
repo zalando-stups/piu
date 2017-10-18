@@ -155,6 +155,8 @@ def test_login_zign_user(monkeypatch):
     response = MagicMock()
 
     monkeypatch.setattr('zign.api.get_config', lambda: {'user': zign_user})
+    monkeypatch.setattr('piu.cli.load_config', lambda file: {"even_url": "https://even.example.org",
+                                                             "odd_host": "odd-config.example.org"})
     monkeypatch.setattr('os.getenv', lambda: env_user)
     mock_request_access(monkeypatch, expected_user=zign_user)
     monkeypatch.setattr('requests.get', lambda x, timeout: response)
@@ -168,6 +170,8 @@ def test_login_env_user(monkeypatch):
     response = MagicMock()
 
     monkeypatch.setattr('zign.api.get_config', lambda: {'user': ''})
+    monkeypatch.setattr('piu.cli.load_config', lambda file: {"even_url": "https://even.example.org",
+                                                             "odd_host": "odd-config.example.org"})
     monkeypatch.setattr('os.getenv', lambda x: env_user)
     mock_request_access(monkeypatch, expected_user=env_user)
     monkeypatch.setattr('requests.get', lambda x, timeout: response)
@@ -182,6 +186,8 @@ def test_login_arg_user(monkeypatch, tmpdir):
     response = MagicMock()
 
     monkeypatch.setattr('zign.api.get_config', lambda: {'user': zign_user})
+    monkeypatch.setattr('piu.cli.load_config', lambda file: {"even_url": "https://even.example.org",
+                                                             "odd_host": "odd-config.example.org"})
     monkeypatch.setattr('os.getenv', lambda x: env_user)
     mock_request_access(monkeypatch, expected_user='arg_user')
     monkeypatch.setattr('requests.get', lambda x, timeout: response)
