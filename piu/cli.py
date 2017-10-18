@@ -3,16 +3,15 @@
 Helper script to request access to a certain host.
 '''
 
+import boto3
 import click
 import datetime
 import operator
-import configparser
 import ipaddress
 import json
 import os
 import subprocess
 import requests
-import boto3
 import socket
 import sys
 import time
@@ -24,6 +23,7 @@ from clickclick import error, AliasedGroup, print_table, OutputFormat
 from .error_handling import handle_exceptions
 
 import piu
+import piu.utils
 
 try:
     import pyperclip
@@ -73,6 +73,12 @@ MAX_COLUMN_WIDTHS = {
 
 output_option = click.option('-o', '--output', type=click.Choice(['text', 'json', 'tsv']), default='text',
                              help='Use alternative output format')
+region_option = click.option('--region', envvar='AWS_DEFAULT_REGION', metavar='AWS_REGION_ID',
+                             default=piu.utils.current_region(),
+                             help='AWS region ID (e.g. eu-central-1)',
+                             callback=piu.utils.validate_region)
+odd_host_option = click.option('-O', '--odd-host', help='Odd SSH bastion hostname',
+                               envvar='ODD_HOST', metavar='HOSTNAME')
 
 
 def parse_time(s: str) -> float:
@@ -199,7 +205,7 @@ def cli(ctx, config_file):
 @click.argument('reason', required=False)
 @click.argument('reason_cont', nargs=-1, metavar='[..]', required=False)
 @click.option('-E', '--even-url', help='Even SSH Access Granting Service URL', envvar='EVEN_URL', metavar='URI')
-@click.option('-O', '--odd-host', help='Odd SSH bastion hostname', envvar='ODD_HOST', metavar='HOSTNAME')
+@odd_host_option
 @click.option('-t', '--lifetime', help='Lifetime of the SSH access request in minutes (default: 60)',
               type=click.IntRange(1, 525600, clamp=True))
 @click.option('--interactive', help='Offers assistance', envvar='PIU_INTERACTIVE', is_flag=True, default=False)
@@ -208,13 +214,17 @@ def cli(ctx, config_file):
 @click.option('--connect', help='Directly connect to the host', envvar='PIU_CONNECT', is_flag=True, default=False)
 @click.option('--tunnel', help='Tunnel to the host', envvar='PIU_TUNNEL',
               callback=tunnel_validation, metavar='LOCALPORT:REMOTEPORT')
+@region_option
 @click.pass_obj
-def request_access(obj, host, reason, reason_cont, even_url, odd_host, lifetime, interactive,
-                   insecure, clip, connect, tunnel):
+def request_access(config_file, host, reason, reason_cont, even_url, odd_host, lifetime, interactive,
+                   insecure, clip, connect, tunnel, region):
     '''Request SSH access to a single host'''
+    config = load_config(config_file)
+    even_url = even_url or config.get('even_url')
+    odd_host = odd_host or piu.utils.find_odd_host(region) or config.get('odd_host')
 
     if interactive:
-        host, reason = request_access_interactive()
+        host, odd_host, reason = request_access_interactive(region, odd_host)
     if not host:
         raise click.UsageError('Missing argument "host".')
     if not reason:
@@ -239,12 +249,6 @@ def request_access(obj, host, reason, reason_cont, even_url, odd_host, lifetime,
     reason = ' '.join([reason] + list(reason_cont)).strip()
 
     cacert = not insecure
-
-    config_file = obj
-    config = load_config(config_file)
-
-    even_url = even_url or config.get('even_url')
-    odd_host = odd_host or config.get('odd_host')
     if 'cacert' in config:
         cacert = config['cacert']
 
@@ -294,23 +298,10 @@ def request_access(obj, host, reason, reason_cont, even_url, odd_host, lifetime,
         sys.exit(return_code)
 
 
-def get_region():
-    aws_default_region_envvar = os.getenv('AWS_DEFAULT_REGION')
-    if aws_default_region_envvar:
-        return aws_default_region_envvar
+def request_access_interactive(region, odd_host):
+    region = click.prompt('AWS region', default=region)
+    odd_host = click.prompt('Odd SSH bastion hostname', default=odd_host)
 
-    config = configparser.ConfigParser()
-    try:
-        config.read(os.path.expanduser('~/.aws/config'))
-        if 'default' in config:
-            region = config['default']['region']
-            return region
-    except:
-        return ''
-
-
-def request_access_interactive():
-    region = click.prompt('AWS region', default=get_region())
     ec2 = boto3.resource('ec2', region_name=region)
     reservations = ec2.instances.filter(
                    Filters=[{'Name': 'instance-state-name', 'Values': ['running']}])
@@ -348,29 +339,29 @@ def request_access_interactive():
         instance_index = 0
     host = sorted_instance_list[instance_index]['private_ip']
     reason = click.prompt('Reason', default='Troubleshooting')
-    return (host, reason)
+    return (host, odd_host, reason)
 
 
 @cli.command('list-access-requests')
 @click.option('-u', '--user', help='Filter by username', metavar='NAME')
-@click.option('-O', '--odd-host', help='Odd SSH bastion hostname (default: my configured odd host)',
-              envvar='ODD_HOST', metavar='HOSTNAME', default='MY-ODD-HOST')
+@odd_host_option
 @click.option('-s', '--status', help='Filter by status', metavar='NAME', type=click.Choice(STATUS_NAMES))
 @click.option('-l', '--limit', help='Limit number of results', type=int, default=20)
 @click.option('--offset', help='Offset', type=int, default=0)
 @output_option
+@region_option
 @click.pass_obj
-def list_access_requests(obj, user, odd_host, status, limit, offset, output):
+def list_access_requests(config_file, user, odd_host, status, limit, offset, output, region):
     '''List access requests filtered by user, host and status'''
-    config = load_config(obj)
+    config = load_config(config_file)
 
     if user == '*':
         user = None
 
     if odd_host == '*':
         odd_host = None
-    elif odd_host == 'MY-ODD-HOST':
-        odd_host = config.get('odd_host')
+    elif odd_host is None:
+        odd_host = piu.utils.find_odd_host(region) or config.get('odd_host')
 
     access_token = zign.api.get_token('piu', ['piu'])
 
