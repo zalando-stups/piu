@@ -199,6 +199,12 @@ def cli(ctx, config_file):
     ctx.obj = config_file
 
 
+def lookup_instance(region, ip_address):
+    filters = [{"Name": "network-interface.addresses.private-ip-address",
+                "Values": [str(ip_address)]}]
+    return next(piu.utils.list_running_instances(region, filters), None)
+
+
 @cli.command('request-access')
 @click.argument('host', metavar='[USER]@HOST', required=False)
 @click.argument('reason', required=False)
@@ -213,10 +219,12 @@ def cli(ctx, config_file):
 @click.option('--connect', help='Directly connect to the host', envvar='PIU_CONNECT', is_flag=True, default=False)
 @click.option('--tunnel', help='Tunnel to the host', envvar='PIU_TUNNEL',
               callback=tunnel_validation, metavar='LOCALPORT:REMOTEPORT')
+@click.option('--check/--no-check', help='Verify that the instance is running',
+              envvar='PIU_CHECK_INSTANCE', default=True)
 @region_option
 @click.pass_obj
 def request_access(config_file, host, reason, reason_cont, even_url, odd_host, lifetime, interactive,
-                   insecure, clip, connect, tunnel, region):
+                   insecure, clip, connect, tunnel, region, check):
     '''Request SSH access to a single host'''
     config = load_config(config_file)
     even_url = even_url or config.get('even_url')
@@ -242,6 +250,12 @@ def request_access(config_file, host, reason, reason_cont, even_url, odd_host, l
 
     try:
         ip = ipaddress.ip_address(hostname)
+
+        if check and not interactive and ip in STUPS_CIDR:
+            instance = lookup_instance(region, ip)
+            if instance is None:
+                click.confirm("No running instances found for {}, do you still want to request access?".format(ip),
+                              abort=True)
     except ValueError:
         ip = None
 
