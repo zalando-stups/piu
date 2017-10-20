@@ -141,6 +141,12 @@ def tunnel_validation(ctx, param, value):
         return value
 
 
+def lookup_instance(region, ip_address):
+    filters = [{"Name": "network-interface.addresses.private-ip-address",
+                "Values": [str(ip_address)]}]
+    return next(piu.utils.list_running_instances(region, filters), None)
+
+
 def _request_access(even_url, cacert, username, hostname, reason, remote_host,
                     lifetime, clip, connect, tunnel):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
@@ -197,12 +203,6 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host,
 @click.pass_context
 def cli(ctx, config_file):
     ctx.obj = config_file
-
-
-def lookup_instance(region, ip_address):
-    filters = [{"Name": "network-interface.addresses.private-ip-address",
-                "Values": [str(ip_address)]}]
-    return next(piu.utils.list_running_instances(region, filters), None)
 
 
 @cli.command('request-access')
