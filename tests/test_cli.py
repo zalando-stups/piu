@@ -2,13 +2,22 @@ from click.testing import CliRunner
 from unittest.mock import MagicMock
 import zign.api
 from piu.cli import cli
+import piu.utils
 import pytest
+
+
+def mock_list_running_instances(monkeypatch, *instances):
+    def mock_fn(region, filter):
+        yield from instances
+
+    monkeypatch.setattr('piu.utils.list_running_instances', mock_fn)
 
 
 @pytest.fixture(autouse=True)
 def mock_aws(monkeypatch):
     monkeypatch.setattr('piu.utils.current_region', lambda: 'eu-central-1')
     monkeypatch.setattr('piu.utils.find_odd_host', lambda region: None)
+    mock_list_running_instances(monkeypatch)
     yield
 
 
@@ -35,14 +44,60 @@ def test_success(monkeypatch):
     monkeypatch.setattr('zign.api.get_token', MagicMock(return_value='123'))
     monkeypatch.setattr('requests.post', MagicMock(return_value=response))
 
-    result = expect_success(['myuser@127.31.0.1',
+    result = expect_success(['myuser@172.31.0.1',
                              '--lifetime=15',
                              '--even-url=https://localhost/',
                              '--odd-host=odd.example.org',
+                             '--no-check',
                              'my reason'],
                             catch_exceptions=False)
 
     assert response.text in result.output
+
+@pytest.mark.parametrize("address,instance_exists,input,succeeded", [
+    # Stups IP, instance found => success
+    ("172.31.0.11", True, '', True),
+
+    # Stups IP, no instance found, confirmed => success
+    ("172.31.0.11", False, 'y', True),
+
+    # Stups IP, no instance found, not confirmed => failure
+    ("172.31.0.11", False, 'n', False),
+
+    # Other IP => success
+    ("10.0.1.1", False, None, True),
+
+    # Hostname => success
+    ("foo.example.org", False, None, True),
+])
+def test_instance_check(monkeypatch, address, instance_exists, input, succeeded):
+    success_text = '**MAGIC-SUCCESS**'
+    request = MagicMock(return_value=MagicMock(status_code=200, text=success_text))
+    monkeypatch.setattr('zign.api.get_token', MagicMock(return_value='123'))
+    monkeypatch.setattr('requests.post', request)
+
+    if instance_exists:
+        mock_list_running_instances(
+            monkeypatch,
+            piu.utils.Instance('i-123456', 'stack1-0o1o0', 'stack2', '0o1o0', address))
+
+    result = CliRunner().invoke(cli,
+                                ['myuser@{}'.format(address),
+                                 '--lifetime=15',
+                                 '--even-url=https://localhost/',
+                                 '--odd-host=odd.example.org',
+                                  'my reason'],
+                                input=input,
+                                catch_exceptions=False)
+
+    if succeeded:
+        assert request.called
+        assert result.exit_code == 0
+        assert success_text in result.output
+    else:
+        assert not request.called
+        assert result.exit_code != 0
+        assert success_text not in result.output
 
 
 def test_bad_request(monkeypatch):
@@ -87,7 +142,7 @@ def test_dialog(monkeypatch):
     monkeypatch.setattr('requests.get', MagicMock(return_value=response))
     monkeypatch.setattr('socket.getaddrinfo', MagicMock())
 
-    result = expect_success(['--config-file=config.yaml', 'req', 'myuser@172.31.0.1',
+    result = expect_success(['--config-file=config.yaml', 'req', 'myuser@172.31.0.1', '--no-check',
                              'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
     assert response.text in result.output
 
@@ -100,7 +155,7 @@ def test_oauth_failure(monkeypatch):
     monkeypatch.setattr('socket.getaddrinfo', MagicMock())
     runner = CliRunner()
 
-    result = runner.invoke(cli, ['--config-file=config.yaml', 'req', 'myuser@172.31.0.1',
+    result = runner.invoke(cli, ['--config-file=config.yaml', 'req', 'myuser@172.31.0.1', '--no-check',
                                  'my reason'], catch_exceptions=False, input='even\nodd\npassword\n\n')
 
     assert result.exit_code == 500
@@ -199,20 +254,12 @@ def test_interactive_success(monkeypatch):
     ec2 = MagicMock()
     request_access = MagicMock(return_value=200)
 
-    response = []
-    response.append(MagicMock(**{'instance_id': 'i-123456',
-                                 'private_ip_address': '172.31.10.10',
-                                 'tags': [{'Key': 'Name', 'Value': 'stack1-0o1o0'},
-                                          {'Key': 'StackVersion', 'Value': '0o1o0'},
-                                          {'Key': 'StackName', 'Value': 'stack1'}]
-                                 }))
-    response.append(MagicMock(**{'instance_id': 'i-789012',
-                                 'private_ip_address': '172.31.10.20',
-                                 'tags': [{'Key': 'Name', 'Value': 'stack2-0o1o0'},
-                                          {'Key': 'StackVersion', 'Value': '0o2o0'},
-                                          {'Key': 'StackName', 'Value': 'stack2'}]
-                                 }))
-    ec2.instances.filter = MagicMock(return_value=response)
+
+    instances = [
+        piu.utils.Instance('i-123456', 'stack1-0o1o0', 'stack2', '0o1o0', '172.31.10.10'),
+        piu.utils.Instance('i-789012', 'stack1-0o1o0', 'stack2', '0o2o0', '172.31.10.20')]
+
+    mock_list_running_instances(monkeypatch, *instances)
     monkeypatch.setattr('boto3.resource', MagicMock(return_value=ec2))
     monkeypatch.setattr('piu.cli._request_access', request_access)
 
@@ -232,14 +279,8 @@ def test_interactive_single_instance_success(monkeypatch):
     ec2 = MagicMock()
     request_access = MagicMock(return_value=200)
 
-    response = []
-    response.append(MagicMock(**{'instance_id': 'i-123456',
-                                 'private_ip_address': '172.31.10.10',
-                                 'tags': [{'Key': 'Name', 'Value': 'stack1-0o1o0'},
-                                          {'Key': 'StackVersion', 'Value': '0o1o0'},
-                                          {'Key': 'StackName', 'Value': 'stack1'}]
-                                 }))
-    ec2.instances.filter = MagicMock(return_value=response)
+    instance = piu.utils.Instance('i-123456', 'stack1-0o1o0', 'stack1', '0o1o0', '172.31.10.10')
+    mock_list_running_instances(monkeypatch, instance)
     monkeypatch.setattr('boto3.resource', MagicMock(return_value=ec2))
     monkeypatch.setattr('piu.cli._request_access', request_access)
 
