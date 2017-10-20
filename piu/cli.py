@@ -219,7 +219,7 @@ def cli(ctx, config_file):
 @click.option('--connect', help='Directly connect to the host', envvar='PIU_CONNECT', is_flag=True, default=False)
 @click.option('--tunnel', help='Tunnel to the host', envvar='PIU_TUNNEL',
               callback=tunnel_validation, metavar='LOCALPORT:REMOTEPORT')
-@click.option('--check/--no-check', help='Verify that the instance is running',
+@click.option('--check/--no-check', help='Verify that the EC2 instance exists and wasn\'t shutdown',
               envvar='PIU_CHECK_INSTANCE', default=True)
 @region_option
 @click.pass_obj
