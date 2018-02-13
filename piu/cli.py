@@ -18,7 +18,7 @@ import yaml
 import zign.api
 import re
 
-from clickclick import error, AliasedGroup, print_table, OutputFormat
+from clickclick import error, AliasedGroup, print_table, OutputFormat, warning
 from .error_handling import handle_exceptions
 
 import piu
@@ -146,6 +146,15 @@ def lookup_instance(region, ip_address):
     return next(piu.utils.list_running_instances(region, filters), None)
 
 
+def ssh_keys_added():
+    try:
+        # ssh-add -l exits with status 1 (and check_call throws) if there are no keys in the SSH agent
+        subprocess.check_call(['ssh-add', '-l'], stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+        return True
+    except Exception:
+        return False
+
+
 def _request_access(even_url, cacert, username, hostname, reason, remote_host,
                     lifetime, clip, connect, tunnel):
     data = {'username': username, 'hostname': hostname, 'reason': reason}
@@ -181,8 +190,10 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host,
         if connect or tunnel:
             subprocess.call(command.split())
 
-        click.secho("Don't forget to add your SSH private key to SSH Agent, for example:")
-        click.secho('ssh-add ~/.ssh/id_rsa')
+        if not ssh_keys_added():
+            warning("No SSH identities found. Please add one using ssh-add, for example:")
+            warning('ssh-add ~/.ssh/id_rsa')
+
         click.secho('You can access your server with the following command:')
         click.secho(command)
 
