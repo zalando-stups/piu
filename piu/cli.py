@@ -182,6 +182,8 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host,
         if connect or tunnel:
             subprocess.call(command.split())
 
+        click.secho("Don't forget to add your SSH to SSH Agent, for example:")
+        click.secho('ssh-add ~/.ssh/id_rsa')
         click.secho('You can access your server with the following command:')
         click.secho(command)
 
