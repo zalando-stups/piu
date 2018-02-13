@@ -26,7 +26,7 @@ import piu.utils
 
 try:
     import pyperclip
-except:
+except ImportError:
     pyperclip = None
 
 
@@ -113,10 +113,9 @@ class AliasedDefaultGroup(AliasedGroup):
 def load_config(path):
     try:
         with open(path, 'rb') as fd:
-            config = yaml.safe_load(fd)
-    except:
-        config = None
-    return config or {}
+            return yaml.safe_load(fd)
+    except Exception:
+        return {}
 
 
 def store_config(config, path):
@@ -272,7 +271,7 @@ def request_access(config_file, host, reason, reason_cont, even_url, odd_host, l
             even_url = 'https://{}'.format(even_url)
         try:
             requests.get(even_url)
-        except:
+        except Exception:
             error('Could not reach {}'.format(even_url))
             even_url = None
         config['even_url'] = even_url
@@ -281,7 +280,7 @@ def request_access(config_file, host, reason, reason_cont, even_url, odd_host, l
         odd_host = click.prompt('Please enter the Odd SSH bastion hostname')
         try:
             socket.getaddrinfo(odd_host, 22)
-        except:
+        except Exception:
             error('Could not resolve hostname {}'.format(odd_host))
             odd_host = None
         config['odd_host'] = odd_host
