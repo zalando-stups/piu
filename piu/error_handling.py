@@ -11,11 +11,9 @@ def store_exception(exception: Exception) -> str:
     Stores the exception in a temporary file and returns its filename
     """
 
-    tracebacks = format_exception(etype=type(exception),
-                                  value=exception,
-                                  tb=exception.__traceback__)  # type: [str]
+    tracebacks = format_exception(etype=type(exception), value=exception, tb=exception.__traceback__)  # type: [str]
 
-    content = ''.join(tracebacks)
+    content = "".join(tracebacks)
 
     with NamedTemporaryFile(prefix="piu-traceback-", delete=False) as error_file:
         file_name = error_file.name
@@ -25,7 +23,7 @@ def store_exception(exception: Exception) -> str:
 
 
 def is_credentials_expired_error(e: ClientError) -> bool:
-    return e.response['Error']['Code'] in ['ExpiredToken', 'RequestExpired']
+    return e.response["Error"]["Code"] in ["ExpiredToken", "RequestExpired"]
 
 
 def handle_exceptions(func):
@@ -34,27 +32,30 @@ def handle_exceptions(func):
         try:
             func()
         except NoCredentialsError as e:
-            print('No AWS credentials found. Use the "zaws" command-line tool to get a temporary access key\n'
-                  'or manually configure either ~/.aws/credentials or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.',
-                  file=sys.stderr)
+            print(
+                'No AWS credentials found. Use the "zaws" command-line tool to get a temporary access key\n'
+                "or manually configure either ~/.aws/credentials or AWS_ACCESS_KEY_ID/AWS_SECRET_ACCESS_KEY.",
+                file=sys.stderr,
+            )
             sys.exit(1)
         except ClientError as e:
             sys.stdout.flush()
             if is_credentials_expired_error(e):
-                print('AWS credentials have expired.\n'
-                      'Use the "zaws" command line tool to get a new temporary access key.',
-                      file=sys.stderr)
+                print(
+                    "AWS credentials have expired.\n"
+                    'Use the "zaws" command line tool to get a new temporary access key.',
+                    file=sys.stderr,
+                )
                 sys.exit(1)
             else:
                 file_name = store_exception(e)
-                print('Unknown Error.\n'
-                      'Please create an issue with the content of {fn}'.format(fn=file_name))
+                print("Unknown Error.\n" "Please create an issue with the content of {fn}".format(fn=file_name))
                 sys.exit(1)
         except Exception as e:
             # Catch All
 
             file_name = store_exception(e)
-            print('Unknown Error.\n'
-                  'Please create an issue with the content of {fn}'.format(fn=file_name))
+            print("Unknown Error.\n" "Please create an issue with the content of {fn}".format(fn=file_name))
             sys.exit(1)
+
     return wrapper
