@@ -18,7 +18,7 @@ sed -i "s/__version__ = .*/__version__ = '${version}'/" */__init__.py
 if [ -z "$GO_PIPELINE_LABEL" ]; then
     python3 setup.py clean
     python3 setup.py test
-    python3 setup.py flake8
+    python3 setup.py black
 
     git add */__init__.py
 
