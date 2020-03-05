@@ -5,3 +5,4 @@ pyperclip
 stups-zign>=1.1.26
 boto3>=1.3.0
 botocore>=1.4.10
+click>=1.2.2

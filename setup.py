@@ -59,7 +59,6 @@ class PyTest(TestCommand):
         ("cov=", None, "Run coverage"),
         ("cov-xml=", None, "Generate junit xml report"),
         ("cov-html=", None, "Generate junit html report"),
-        ("junitxml=", None, "Generate xml of test results"),
     ]
 
     def initialize_options(self):
@@ -67,7 +66,6 @@ class PyTest(TestCommand):
         self.cov = None
         self.cov_xml = False
         self.cov_html = False
-        self.junitxml = None
 
     def finalize_options(self):
         TestCommand.finalize_options(self)
@@ -77,8 +75,6 @@ class PyTest(TestCommand):
                 self.cov.extend(["--cov-report", "xml"])
             if self.cov_html:
                 self.cov.extend(["--cov-report", "html"])
-        if self.junitxml is not None:
-            self.junitxml = ["--junitxml", self.junitxml]
 
     def run_tests(self):
         try:
@@ -88,8 +84,6 @@ class PyTest(TestCommand):
         params = {"args": self.test_args}
         if self.cov:
             params["args"] += self.cov
-        if self.junitxml:
-            params["args"] += self.junitxml
         params["args"] += ["--doctest-modules", MAIN_PACKAGE, "-s"]
         errno = pytest.main(**params)
         sys.exit(errno)
@@ -115,8 +109,6 @@ def setup_package():
     install_reqs = get_install_requirements("requirements.txt")
 
     command_options = {"test": {"test_suite": ("setup.py", "tests"), "cov": ("setup.py", MAIN_PACKAGE)}}
-    if JUNIT_XML:
-        command_options["test"]["junitxml"] = "setup.py", "junit.xml"
     if COVERAGE_XML:
         command_options["test"]["cov_xml"] = "setup.py", True
     if COVERAGE_HTML:
