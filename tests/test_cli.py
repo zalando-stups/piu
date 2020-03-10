@@ -1,7 +1,10 @@
+import tempfile
+
+import boto3
 from click.testing import CliRunner
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, Mock
 import zign.api
-from piu.cli import cli
+from piu.cli import cli, compatible_ami, send_ssh_key, instance_attributes
 import piu.utils
 import pytest
 
@@ -17,6 +20,11 @@ def mock_list_running_instances(monkeypatch, *instances):
 def mock_aws(monkeypatch):
     monkeypatch.setattr("piu.utils.current_region", lambda: "eu-central-1")
     monkeypatch.setattr("piu.utils.find_odd_host", lambda region: None)
+    monkeypatch.setattr("piu.cli.instance_attributes", MagicMock(return_value={"ImageId": "test"}))
+    monkeypatch.setattr("boto3.client", MagicMock(return_value={}))
+    monkeypatch.setattr("piu.cli.compatible_ami", MagicMock(return_value=False))
+    monkeypatch.setattr("piu.cli.check_ssh_key", MagicMock(return_value=True))
+    monkeypatch.setattr("piu.cli.send_odd_ssh_key", MagicMock(return_value=True))
     mock_list_running_instances(monkeypatch)
     yield
 
@@ -39,7 +47,7 @@ def test_missing_reason():
     assert 'Missing argument "reason"' in result.output
 
 
-def test_success(monkeypatch):
+def test_even_success(monkeypatch):
     response = MagicMock(status_code=200, text="**MAGIC-SUCCESS**")
     monkeypatch.setattr("zign.api.get_token", MagicMock(return_value="123"))
     monkeypatch.setattr("requests.post", MagicMock(return_value=response))
@@ -51,12 +59,89 @@ def test_success(monkeypatch):
             "--even-url=https://localhost/",
             "--odd-host=odd.example.org",
             "--no-check",
+            "--ssh-public-key=~/.ssh/nonexistent",
             "my reason",
         ],
         catch_exceptions=False,
     )
 
     assert response.text in result.output
+
+
+def failed_instance_attributes(_, filter_name, filter_value):
+    if filter_name == "private-ip-address":
+        raise RuntimeError("something bad")
+    return {"ImageId": "abc"}
+
+
+def test_eic_success(monkeypatch):
+    monkeypatch.setattr("zign.api.get_token", MagicMock(return_value="123"))
+    monkeypatch.setattr("piu.cli.send_ssh_key", MagicMock(return_value=True))
+    monkeypatch.setattr("piu.cli.compatible_ami", MagicMock(return_value=True))
+    result = expect_success(
+        [
+            "myuser@172.31.0.1",
+            "--lifetime=15",
+            "--even-url=https://localhost/",
+            "--odd-host=odd.example.org",
+            "--no-check",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "my reason",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 0
+
+
+def test_eic_failure(monkeypatch):
+    monkeypatch.setattr("zign.api.get_token", MagicMock(return_value="123"))
+    monkeypatch.setattr("piu.cli.send_ssh_key", MagicMock(return_value=True))
+    monkeypatch.setattr("piu.cli.compatible_ami", MagicMock(return_value=True))
+    monkeypatch.setattr("piu.cli.instance_attributes", failed_instance_attributes)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "myuser@172.31.0.1",
+            "--lifetime=15",
+            "--even-url=https://localhost/",
+            "--odd-host=odd.example.org",
+            "--no-check",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "my reason",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 1
+    assert "Failed to find instance with IP 172.31.0.1" in result.output
+
+
+def mock_client(success: bool):
+    def client(client_type: str):
+        if client_type == "ec2-instance-connect":
+            mock = MagicMock()
+            mock.send_ssh_public_key.return_value = {"Success": success}
+            return mock
+        return {}
+
+    return client
+
+
+def test_send_ssh_key_success(monkeypatch):
+    ssh_key = tempfile.NamedTemporaryFile()
+    monkeypatch.setattr("boto3.client", mock_client(True))
+    result = send_ssh_key(
+        "test", {"InstanceId": "test-id", "Placement": {"AvailabilityZone": "an-central-10"}}, ssh_key.name
+    )
+    assert result == True
+
+
+def test_send_ssh_key_failure(monkeypatch):
+    ssh_key = tempfile.NamedTemporaryFile()
+    monkeypatch.setattr("boto3.client", mock_client(False))
+    result = send_ssh_key(
+        "test", {"InstanceId": "test-id", "Placement": {"AvailabilityZone": "an-central-10"}}, ssh_key.name
+    )
+    assert not result
 
 
 @pytest.mark.parametrize(
@@ -92,6 +177,7 @@ def test_instance_check(monkeypatch, address, instance_exists, input, succeeded)
             "--lifetime=15",
             "--even-url=https://localhost/",
             "--odd-host=odd.example.org",
+            "--ssh-public-key=~/.ssh/nonexistent",
             "my reason",
         ],
         input=input,
@@ -116,7 +202,16 @@ def test_bad_request(monkeypatch):
 
     result = runner.invoke(
         cli,
-        ["req", "--lifetime=15", "--even-url=https://localhost/", "myuser@odd-host", "my reason"],
+        [
+            "req",
+            "--lifetime=15",
+            "--even-url=https://localhost/",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "-O",
+            "odd-host",
+            "192.168.1.1",
+            "my reason",
+        ],
         catch_exceptions=False,
     )
 
@@ -131,11 +226,44 @@ def test_auth_failure(monkeypatch):
     runner = CliRunner()
 
     result = runner.invoke(
-        cli, ["r", "--even-url=https://localhost/", "myuser@odd-host", "my reason"], catch_exceptions=False
+        cli,
+        [
+            "r",
+            "--even-url=https://localhost/",
+            "-O",
+            "myuser@odd-host",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "test-host",
+            "my reason",
+        ],
+        catch_exceptions=False,
     )
 
     assert response.text in result.output
     assert "Server returned status 403:" in result.output
+
+
+def test_send_odd_failure(monkeypatch):
+    runner = CliRunner()
+    monkeypatch.setattr("piu.cli.instance_attributes", MagicMock(return_value={"ImageId": "test"}))
+    monkeypatch.setattr("boto3.client", MagicMock(return_value={}))
+    monkeypatch.setattr("piu.cli.compatible_ami", MagicMock(return_value=True))
+    monkeypatch.setattr("piu.cli.send_odd_ssh_key", MagicMock(return_value=False))
+    result = runner.invoke(
+        cli,
+        [
+            "r",
+            "--even-url=https://localhost/",
+            "-O",
+            "myuser@odd-host",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "test-host",
+            "my reason",
+        ],
+        catch_exceptions=False,
+    )
+    assert result.exit_code == 1
+    assert "Failed to send SSH key to odd host myuser@odd-host" in result.output
 
 
 def test_dialog(monkeypatch):
@@ -146,7 +274,14 @@ def test_dialog(monkeypatch):
     monkeypatch.setattr("socket.getaddrinfo", MagicMock())
 
     result = expect_success(
-        ["--config-file=config.yaml", "req", "myuser@172.31.0.1", "--no-check", "my reason"],
+        [
+            "--config-file=config.yaml",
+            "req",
+            "myuser@172.31.0.1",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "--no-check",
+            "my reason",
+        ],
         catch_exceptions=False,
         input="even\nodd\npassword\n\n",
     )
@@ -163,12 +298,19 @@ def test_oauth_failure(monkeypatch):
 
     result = runner.invoke(
         cli,
-        ["--config-file=config.yaml", "req", "myuser@172.31.0.1", "--no-check", "my reason"],
+        [
+            "--config-file=config.yaml",
+            "req",
+            "myuser@172.31.0.1",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "--no-check",
+            "my reason",
+        ],
         catch_exceptions=False,
         input="even\nodd\npassword\n\n",
     )
 
-    assert result.exit_code == 500
+    assert result.exit_code == 1
     assert "Server error: **MAGIC-FAIL**" in result.output
 
 
@@ -180,7 +322,7 @@ def mock_request_access(monkeypatch, expected_user=None, expected_odd_host=None)
             assert expected_odd_host == odd_host
         return 200
 
-    monkeypatch.setattr("piu.cli._request_access", mock_fn)
+    monkeypatch.setattr("piu.cli._request_even_access", mock_fn)
 
 
 def test_bastion_arg_host(monkeypatch):
@@ -191,7 +333,15 @@ def test_bastion_arg_host(monkeypatch):
     mock_request_access(monkeypatch, expected_odd_host="odd-arg.example.org")
 
     expect_success(
-        ["request-access", "-O", "odd-arg.example.org", "user@host.example.org", "reason"], catch_exceptions=False
+        [
+            "request-access",
+            "-O",
+            "odd-arg.example.org",
+            "--ssh-public-key=~/.ssh/nonexistent",
+            "user@host.example.org",
+            "reason",
+        ],
+        catch_exceptions=False,
     )
 
 
@@ -204,7 +354,10 @@ def test_bastion_autodetect_host(monkeypatch):
 
     mock_request_access(monkeypatch, expected_odd_host="odd-auto.example.org")
 
-    expect_success(["request-access", "user@host.example.org", "reason"], catch_exceptions=False)
+    expect_success(
+        ["request-access", "--ssh-public-key=~/.ssh/nonexistent", "user@host.example.org", "reason"],
+        catch_exceptions=False,
+    )
 
 
 def test_bastion_config_host(monkeypatch):
@@ -282,7 +435,7 @@ def test_interactive_success(monkeypatch):
 
     mock_list_running_instances(monkeypatch, *instances)
     monkeypatch.setattr("boto3.resource", MagicMock(return_value=ec2))
-    monkeypatch.setattr("piu.cli._request_access", request_access)
+    monkeypatch.setattr("piu.cli._request_even_access", request_access)
 
     input_stream = "\n".join(["eu-west-1", "odd-eu-west-1.test.example.org", "1", "Troubleshooting"]) + "\n"
 
@@ -302,7 +455,7 @@ def test_interactive_single_instance_success(monkeypatch):
     instance = piu.utils.Instance("i-123456", "stack1-0o1o0", "stack1", "0o1o0", "172.31.10.10")
     mock_list_running_instances(monkeypatch, instance)
     monkeypatch.setattr("boto3.resource", MagicMock(return_value=ec2))
-    monkeypatch.setattr("piu.cli._request_access", request_access)
+    monkeypatch.setattr("piu.cli._request_even_access", request_access)
 
     input_stream = "\n".join(["eu-west-1", "", "Troubleshooting"]) + "\n"
 
@@ -322,7 +475,7 @@ def test_interactive_no_instances_failure(monkeypatch):
     response = []
     ec2.instances.filter = MagicMock(return_value=response)
     monkeypatch.setattr("boto3.resource", MagicMock(return_value=ec2))
-    monkeypatch.setattr("piu.cli._request_access", MagicMock(side_effect=request_access))
+    monkeypatch.setattr("piu.cli._request_even_access", MagicMock(side_effect=request_access))
 
     runner = CliRunner()
     input_stream = "\neu-west-1\n"
@@ -398,3 +551,31 @@ def test_tunnel_success(monkeypatch):
 
     assert response.text in result.output
     assert "-L 2380:somehost.example.org:2379" in result.output
+
+
+def test_compatible_ami_success(monkeypatch):
+    ec2mock = MagicMock()
+    ec2mock.describe_images.return_value = {"Images": [{"CreationDate": "2028-02-05T19:39:50.000Z"}]}
+    assert compatible_ami(ec2mock, ami_id="abc")
+
+
+def test_incompatible_ami_success(monkeypatch):
+    ec2mock = MagicMock()
+    ec2mock.describe_images.return_value = {"Images": [{"CreationDate": "2018-02-05T19:39:50.000Z"}]}
+    assert not compatible_ami(ec2mock, ami_id="abc")
+
+
+def test_instance_attributes_success(monkeypatch):
+    ec2 = MagicMock()
+    attributes = {"abc": "test"}
+    ec2.describe_instances.return_value = {"Reservations": [{"Instances": [attributes]}]}
+    t = instance_attributes(ec2, "test-filter", "test-value")
+    assert t == attributes
+    ec2.describe_instances.assert_called_with(Filters=[{"Name": "test-filter", "Values": ["test-value"]}])
+
+
+def test_instance_attributes_success(monkeypatch):
+    ec2 = MagicMock()
+    ec2.describe_instances.side_effect = Exception("random exception")
+    with pytest.raises(Exception):
+        instance_attributes(ec2, "test-filter", "test-value")

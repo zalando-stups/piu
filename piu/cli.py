@@ -3,6 +3,7 @@
 Helper script to request access to a certain host.
 """
 
+import boto3
 import click
 import datetime
 import operator
@@ -10,6 +11,8 @@ import ipaddress
 import json
 import os
 import subprocess
+
+import dateutil
 import requests
 import socket
 import sys
@@ -23,6 +26,8 @@ from .error_handling import handle_exceptions
 
 import piu
 import piu.utils
+
+COMPATIBLE_AMI_CUTOFF = "2020-02-19T12:00:00.000Z"
 
 try:
     import pyperclip
@@ -143,7 +148,25 @@ def ssh_keys_added():
         return False
 
 
-def _request_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, clip, connect, tunnel):
+def _request_eic_access(
+    ec2, hostname: str, remote_host: str, clip: bool, connect: bool, tunnel: bool, ssh_public_key: str
+) -> bool:
+    host_via = hostname
+    click.secho("Requesting access with EIC to host {host_via}".format(host_via=host_via), bold=True)
+    if remote_host:
+        try:
+            remote_attributes = instance_attributes(ec2, "private-ip-address", remote_host)
+        except RuntimeError:
+            print("Failed to get attributes for instances with private IP address {}".format(remote_host))
+            return False
+        if not send_ssh_key("ubuntu", remote_attributes, ssh_public_key):
+            return False
+    click.secho("Login credentials are valid only for 60 seconds. Please be quick.")
+    ssh_connection(clip, connect, hostname, remote_host, tunnel, "odd", "ubuntu")
+    return True
+
+
+def _request_even_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, clip, connect, tunnel):
     data = {"username": username, "hostname": hostname, "reason": reason}
     host_via = hostname
     if remote_host:
@@ -155,10 +178,11 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host, l
         access_token = zign.api.get_token("piu", ["uid"])
     except zign.api.ServerError as e:
         click.secho("{}".format(e), fg="red", bold=True)
-        return 500
+        return False
 
     click.secho(
-        "Requesting access to host {host_via} for {username}..".format(host_via=host_via, username=username), bold=True
+        "Requesting access with Even to host {host_via} for {username}..".format(host_via=host_via, username=username),
+        bold=True,
     )
     r = requests.post(
         even_url,
@@ -168,36 +192,38 @@ def _request_access(even_url, cacert, username, hostname, reason, remote_host, l
     )
     if r.status_code == 200:
         click.secho(r.text, fg="green", bold=True)
-        ssh_command = ""
-        if remote_host:
-            ssh_command = "ssh -o StrictHostKeyChecking=no {username}@{remote_host}".format(**vars())
-            if tunnel:
-                ports = tunnel.split(":")
-                ssh_command = "-L {local_port}:{remote_host}:{remote_port}".format(
-                    local_port=ports[0], remote_host=remote_host, remote_port=ports[1]
-                )
-        command = "ssh -tA {username}@{hostname} {ssh_command}".format(
-            username=username, hostname=hostname, ssh_command=ssh_command
-        )
-        if connect or tunnel:
-            subprocess.call(command.split())
-
-        if not ssh_keys_added():
-            warning("No SSH identities found. Please add one using ssh-add, for example:")
-            warning("ssh-add ~/.ssh/id_rsa")
-
-        click.secho("You can access your server with the following command:")
-        click.secho(command)
-
-        if clip:
-            click.secho('\nOr just check your clipboard and run ctrl/command + v (requires package "xclip" on Linux)')
-            if pyperclip is not None:
-                pyperclip.copy(command)
+        ssh_connection(clip, connect, hostname, remote_host, tunnel, username, username)
     else:
         click.secho(
             "Server returned status {code}: {text}".format(code=r.status_code, text=r.text), fg="red", bold=True
         )
-    return r.status_code
+    return r.status_code == 200
+
+
+def ssh_connection(clip, connect, hostname, remote_host, tunnel, odd_user, remote_user):
+    if tunnel:
+        ports = tunnel.split(":")
+        ssh_command = "ssh {odd_user}@{hostname} -L {local_port}:{remote_host}:{remote_port}".format(
+            odd_user=odd_user, hostname=hostname, local_port=ports[0], remote_host=remote_host, remote_port=ports[1]
+        )
+    else:
+        if remote_host:
+            ssh_command = "ssh -J {odd_user}@{odd_host} {remote_user}@{remote_host}".format(
+                odd_user=odd_user, odd_host=hostname, remote_user=remote_user, remote_host=remote_host
+            )
+        else:
+            ssh_command = "ssh {odd_user}@{odd_host}".format(odd_user=odd_user, odd_host=hostname)
+    if connect or tunnel:
+        subprocess.call(ssh_command.split())
+    if not ssh_keys_added():
+        warning("No SSH identities found. Please add one using ssh-add, for example:")
+        warning("ssh-add ~/.ssh/id_rsa")
+    click.secho("You can access your server with the following command:")
+    click.secho(ssh_command)
+    if clip:
+        click.secho('\nOr just check your clipboard and run ctrl/command + v (requires package "xclip" on Linux)')
+        if pyperclip is not None:
+            pyperclip.copy(ssh_command)
 
 
 @click.group(cls=AliasedDefaultGroup, context_settings=CONTEXT_SETTINGS)
@@ -247,6 +273,13 @@ def cli(ctx, config_file):
     envvar="PIU_CHECK_INSTANCE",
     default=True,
 )
+@click.option(
+    "-i",
+    "--ssh-public-key",
+    help="The public key to use to SSH",
+    type=click.Path(),
+    default=os.path.expanduser("~/.ssh/id_rsa.pub"),
+)
 @region_option
 @click.pass_obj
 def request_access(
@@ -264,14 +297,16 @@ def request_access(
     tunnel,
     region,
     check,
+    ssh_public_key,
 ):
-    """Request SSH access to a single host"""
     config = load_config(config_file)
     even_url = even_url or config.get("even_url")
     odd_host = odd_host or piu.utils.find_odd_host(region) or config.get("odd_host")
+    if not check_ssh_key(ssh_public_key) and check_ssh_key(config.get("ssh_public_key")):
+        ssh_public_key = config.get("ssh_public_key")
 
     if interactive:
-        host, odd_host, reason = request_access_interactive(region, odd_host)
+        host, odd_host, reason, ssh_public_key = request_access_interactive(region, odd_host, ssh_public_key)
     if not host:
         raise click.UsageError('Missing argument "host".')
     if not reason:
@@ -327,6 +362,10 @@ def request_access(
             odd_host = None
         config["odd_host"] = odd_host
 
+    while not check_ssh_key(ssh_public_key):
+        ssh_public_key = click.prompt("Please enter path of a valid SSH public key")
+
+    config["ssh_public_key"] = ssh_public_key
     store_config(config, config_file)
 
     if not even_url.endswith("/access-requests"):
@@ -345,15 +384,60 @@ def request_access(
         first_host = remote_host
         remote_host = None
 
-    return_code = _request_access(
-        even_url, cacert, username, first_host, reason, remote_host, lifetime, clip, connect, tunnel
+    ec2 = boto3.client("ec2")
+    if not send_odd_ssh_key(ec2, first_host, ssh_public_key):
+        error("Failed to send SSH key to odd host {host:s}".format(host=first_host))
+        sys.exit(1)
+
+    use_eic = True
+    if remote_host:
+        try:
+            remote_attributes = instance_attributes(ec2, "private-ip-address", remote_host)
+        except RuntimeError:
+            print("Failed to find instance with IP {0:s}".format(remote_host))
+            sys.exit(1)
+        use_eic = compatible_ami(ec2, remote_attributes["ImageId"])
+
+    if use_eic:
+        success = _request_eic_access(ec2, first_host, remote_host, clip, connect, tunnel, ssh_public_key)
+    else:
+        success = _request_even_access(
+            even_url, cacert, username, first_host, reason, remote_host, lifetime, clip, connect, tunnel
+        )
+    if not success:
+        sys.exit(1)
+
+
+def check_ssh_key(key_path: str) -> bool:
+    # TODO: verify that the input key is actually an SSH public key
+    if key_path and os.path.exists(key_path):
+        return True
+    return False
+
+
+def send_odd_ssh_key(ec2, odd_hostname: str, public_key: str) -> bool:
+    odd_ip = socket.gethostbyname(odd_hostname)
+    try:
+        odd_attributes = instance_attributes(ec2, "ip-address", odd_ip)
+    except RuntimeError as e:
+        print("Failed to find odd host {0:s}: {1:s}".format(odd_hostname), e)
+    return send_ssh_key("odd", odd_attributes, public_key)
+
+
+def send_ssh_key(username: str, host: dict, public_key: str) -> bool:
+    with open(public_key) as key:
+        contents = key.read()
+    eic = boto3.client("ec2-instance-connect")
+    result = eic.send_ssh_public_key(
+        InstanceId=host["InstanceId"],
+        InstanceOSUser=username,
+        SSHPublicKey=contents,
+        AvailabilityZone=host["Placement"]["AvailabilityZone"],
     )
-
-    if return_code != 200:
-        sys.exit(return_code)
+    return result["Success"]
 
 
-def request_access_interactive(region, odd_host):
+def request_access_interactive(region, odd_host, ssh_public_key):
     region = click.prompt("AWS region", default=region)
     odd_host = click.prompt("Odd SSH bastion hostname", default=odd_host)
 
@@ -386,7 +470,8 @@ def request_access_interactive(region, odd_host):
 
     host = stack_instances[instance_index].private_ip
     reason = click.prompt("Reason", default="Troubleshooting")
-    return (host, odd_host, reason)
+    ssh_public_key = click.prompt("SSH Public Key", default=ssh_public_key)
+    return host, odd_host, reason, ssh_public_key
 
 
 @cli.command("list-access-requests")
@@ -432,6 +517,23 @@ def list_access_requests(config_file, user, odd_host, status, limit, offset, out
             titles=TITLES,
             max_column_widths=MAX_COLUMN_WIDTHS,
         )
+
+
+def instance_attributes(ec2, filter_name: str, filter_value: str) -> dict:
+    instances = ec2.describe_instances(Filters=[{"Name": filter_name, "Values": [filter_value]}])
+    if len(instances["Reservations"]) < 1 or len(instances["Reservations"][0]["Instances"]) < 1:
+        raise RuntimeError("Failed to find instance with {0:s}: {1:s}".format(filter_name, filter_value))
+    return instances["Reservations"][0]["Instances"][0]
+
+
+def compatible_ami(ec2, ami_id: str) -> bool:
+    amis = ec2.describe_images(ImageIds=[ami_id])
+    if len(amis["Images"]) != 1:
+        raise RuntimeError("Failed to determine AMI properties for ami {0:s}".format(ami_id))
+    ami_creation = dateutil.parser.parse(amis["Images"][0]["CreationDate"])
+    if ami_creation > dateutil.parser.parse(COMPATIBLE_AMI_CUTOFF):
+        return True
+    return False
 
 
 def main():
