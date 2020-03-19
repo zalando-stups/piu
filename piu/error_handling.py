@@ -26,6 +26,13 @@ def is_credentials_expired_error(e: ClientError) -> bool:
     return e.response["Error"]["Code"] in ["ExpiredToken", "RequestExpired"]
 
 
+def is_permissions_error(e: ClientError) -> bool:
+    return (
+        e.response["Error"]["Code"] == "AccessDeniedException"
+        and "ec2-instance-connect" in e.response["Error"]["Message"]
+    )
+
+
 def handle_exceptions(func):
     @functools.wraps(func)
     def wrapper():
@@ -45,6 +52,13 @@ def handle_exceptions(func):
                     "AWS credentials have expired.\n"
                     'Use the "zaws" command line tool to get a new temporary access key.',
                     file=sys.stderr,
+                )
+                sys.exit(1)
+            elif is_permissions_error(e):
+                print(
+                    "Do you have permissions to use SSH in this account? If this is a Kubernetes account"
+                    " please consider using alternate access methods as described in the documentation "
+                    "https://cloud.docs.zalando.net/howtos/access-private-resources/"
                 )
                 sys.exit(1)
             else:

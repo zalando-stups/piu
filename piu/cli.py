@@ -420,7 +420,8 @@ def send_odd_ssh_key(ec2, odd_hostname: str, public_key: str) -> bool:
     try:
         odd_attributes = instance_attributes(ec2, "ip-address", odd_ip)
     except RuntimeError as e:
-        print("Failed to find odd host {0:s}: {1:s}".format(odd_hostname), e)
+        print("Failed to find odd host {0:s} in current account".format(odd_hostname))
+        return False
     return send_ssh_key("odd", odd_attributes, public_key)
 
 
