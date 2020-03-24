@@ -1,0 +1,51 @@
+version: "2017-09-20"
+pipeline:
+  - id: build
+    type: script
+    overlay: ci/python
+    commands:
+      - desc: Check formatting
+        cmd: |
+          pip3 install black rstvalidator
+          python3 -m rstvalidator README.rst
+          black --check .
+      - desc: Test
+        cmd: python3 setup.py test
+      - desc: Build the package
+        cmd: |
+          if [[ -z "${CDP_PULL_REQUEST_NUMBER}" ]]; then
+            VERSION="1.2.${CDP_TARGET_BRANCH_COUNTER}"
+          else
+            VERSION="0.0.1-dev"
+          fi
+
+          DOCKER_IMAGE="pierone.stups.zalan.do/teapot/stups-piu-release:${CDP_TARGET_REPOSITORY_COUNTER}"
+
+          docker build --build-arg VERSION="${VERSION}" -t "$DOCKER_IMAGE" .
+
+          VERSION="$(docker run --entrypoint cat --rm "$DOCKER_IMAGE" /pydist/.version)"
+          if [[ "${CDP_TARGET_BRANCH}" = "master" && -z "${CDP_PULL_REQUEST_NUMBER}" ]]; then
+            docker push "$DOCKER_IMAGE"
+            git gh-tag "$VERSION"
+          fi
+
+  - id: release
+    type: process
+    desc: Release to TestPyPI
+    target: stups
+    process: microservice_standard_deployment
+    config:
+      apply_permanent_resources:
+        image: pierone.stups.zalan.do/teapot/stups-piu-release:#{CDP_TARGET_REPOSITORY_COUNTER}
+        env:
+          - name: USERNAME
+            valueFrom:
+              secretKeyRef:
+                name: teapot-pypi-credentials
+                key: username
+          - name: PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: teapot-pypi-credentials
+                key: password
+
