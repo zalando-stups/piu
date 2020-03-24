@@ -49,9 +49,3 @@ Running Unit Tests
 
     $ python3 setup.py test --cov-html=true
 
-Releasing
-=========
-
-.. code-block:: bash
-
-    $ ./release.sh <NEW-VERSION>
