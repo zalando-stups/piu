@@ -549,7 +549,6 @@ def test_tunnel_success(monkeypatch):
         catch_exceptions=False,
     )
 
-    assert response.text in result.output
     assert "-L 2380:somehost.example.org:2379" in result.output
 
 
