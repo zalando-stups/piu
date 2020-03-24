@@ -153,7 +153,7 @@ def _request_eic_access(
 ) -> bool:
     host_via = hostname
     click.secho("Requesting access with EIC to host {host_via}".format(host_via=host_via), bold=True)
-    if remote_host:
+    if remote_host and not tunnel:
         try:
             remote_attributes = instance_attributes(ec2, "private-ip-address", remote_host)
         except RuntimeError:
@@ -161,8 +161,7 @@ def _request_eic_access(
             return False
         if not send_ssh_key("ubuntu", remote_attributes, ssh_public_key):
             return False
-    click.secho("Login credentials are valid only for 60 seconds. Please be quick.")
-    ssh_connection(clip, connect, hostname, remote_host, tunnel, "odd", "ubuntu")
+    ssh_connection(clip, connect, hostname, remote_host, tunnel, "odd", "ubuntu", quick_login=True)
     return True
 
 
@@ -200,7 +199,7 @@ def _request_even_access(even_url, cacert, username, hostname, reason, remote_ho
     return r.status_code == 200
 
 
-def ssh_connection(clip, connect, hostname, remote_host, tunnel, odd_user, remote_user):
+def ssh_connection(clip, connect, hostname, remote_host, tunnel, odd_user, remote_user, quick_login=False):
     if tunnel:
         ports = tunnel.split(":")
         ssh_command = "ssh {odd_user}@{hostname} -L {local_port}:{remote_host}:{remote_port}".format(
@@ -215,6 +214,8 @@ def ssh_connection(clip, connect, hostname, remote_host, tunnel, odd_user, remot
             ssh_command = "ssh {odd_user}@{odd_host}".format(odd_user=odd_user, odd_host=hostname)
     if connect or tunnel:
         subprocess.call(ssh_command.split())
+    elif quick_login:
+        click.secho("Please login within the next 60 seconds.")
     if not ssh_keys_added():
         warning("No SSH identities found. Please add one using ssh-add, for example:")
         warning("ssh-add ~/.ssh/id_rsa")
@@ -390,7 +391,7 @@ def request_access(
         sys.exit(1)
 
     use_eic = True
-    if remote_host:
+    if remote_host and not tunnel:
         try:
             remote_attributes = instance_attributes(ec2, "private-ip-address", remote_host)
         except RuntimeError:
