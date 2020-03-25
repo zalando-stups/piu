@@ -17,11 +17,14 @@ import requests
 import socket
 import sys
 import time
+
+import sshpubkeys
 import yaml
 import zign.api
 import re
 
 from clickclick import error, AliasedGroup, print_table, OutputFormat, warning
+
 from .error_handling import handle_exceptions
 
 import piu
@@ -275,11 +278,7 @@ def cli(ctx, config_file):
     default=True,
 )
 @click.option(
-    "-i",
-    "--ssh-public-key",
-    help="The public key to use to SSH",
-    type=click.Path(),
-    default=os.path.expanduser("~/.ssh/id_rsa.pub"),
+    "-i", "--ssh-public-key", help="The public key to use to SSH", type=click.Path(),
 )
 @region_option
 @click.pass_obj
@@ -303,8 +302,9 @@ def request_access(
     config = load_config(config_file)
     even_url = even_url or config.get("even_url")
     odd_host = odd_host or piu.utils.find_odd_host(region) or config.get("odd_host")
-    if not check_ssh_key(ssh_public_key) and check_ssh_key(config.get("ssh_public_key")):
-        ssh_public_key = config.get("ssh_public_key")
+    ssh_public_key = validate_ssh_key(
+        ssh_public_key, config.get("ssh_public_key"), os.path.expanduser("~/.ssh/id_rsa.pub"), interactive
+    )
 
     if interactive:
         host, odd_host, reason, ssh_public_key = request_access_interactive(region, odd_host, ssh_public_key)
@@ -409,9 +409,35 @@ def request_access(
         sys.exit(1)
 
 
+def validate_ssh_key(option_path: str, config_path: str, fallback_path: str, interactive: str) -> str:
+    if option_path:
+        if check_ssh_key(option_path):
+            return option_path
+        if not interactive:
+            error("specified ssh public key at {0:s} is not a valid key".format(option_path))
+            sys.exit(1)
+    elif check_ssh_key(config_path):
+        return config_path
+    elif check_ssh_key(fallback_path):
+        return fallback_path
+    if not interactive:
+        error(
+            "No valid SSH public key could be determined. "
+            "Please specify one with the -i flag. Consult help for details"
+        )
+        sys.exit(1)
+    return ""
+
+
 def check_ssh_key(key_path: str) -> bool:
-    # TODO: verify that the input key is actually an SSH public key
     if key_path and os.path.exists(key_path):
+        with open(key_path) as key:
+            contents = key.read()
+            key = sshpubkeys.SSHKey(contents)
+            try:
+                key.parse()
+            except (sshpubkeys.InvalidKeyError, NotImplementedError) as e:
+                return False
         return True
     return False
 

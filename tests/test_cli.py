@@ -1,6 +1,5 @@
 import tempfile
 
-import boto3
 from click.testing import CliRunner
 from unittest.mock import MagicMock, Mock
 import zign.api
@@ -24,6 +23,7 @@ def mock_aws(monkeypatch):
     monkeypatch.setattr("boto3.client", MagicMock(return_value={}))
     monkeypatch.setattr("piu.cli.compatible_ami", MagicMock(return_value=False))
     monkeypatch.setattr("piu.cli.check_ssh_key", MagicMock(return_value=True))
+    monkeypatch.setattr("piu.cli.validate_ssh_key", MagicMock(return_value="nonexistent"))
     monkeypatch.setattr("piu.cli.send_odd_ssh_key", MagicMock(return_value=True))
     mock_list_running_instances(monkeypatch)
     yield
