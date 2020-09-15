@@ -278,7 +278,10 @@ def cli(ctx, config_file):
     default=True,
 )
 @click.option(
-    "-i", "--ssh-public-key", help="The public key to use to SSH", type=click.Path(),
+    "-i",
+    "--ssh-public-key",
+    help="The public key to use to SSH",
+    type=click.Path(),
 )
 @region_option
 @click.pass_obj
