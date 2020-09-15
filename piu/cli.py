@@ -278,7 +278,10 @@ def cli(ctx, config_file):
     default=True,
 )
 @click.option(
-    "-i", "--ssh-public-key", help="The public key to use to SSH", type=click.Path(),
+    "-i",
+    "--ssh-public-key",
+    help="The public key to use to SSH",
+    type=click.Path(),
 )
 @region_option
 @click.pass_obj
@@ -364,7 +367,7 @@ def request_access(
         config["odd_host"] = odd_host
 
     while not check_ssh_key(ssh_public_key):
-        ssh_public_key = click.prompt("Please enter path of a valid SSH public key")
+        ssh_public_key = os.path.expanduser(click.prompt("Please enter path of a valid SSH public key"))
 
     config["ssh_public_key"] = ssh_public_key
     store_config(config, config_file)
@@ -498,7 +501,7 @@ def request_access_interactive(region, odd_host, ssh_public_key):
 
     host = stack_instances[instance_index].private_ip
     reason = click.prompt("Reason", default="Troubleshooting")
-    ssh_public_key = click.prompt("SSH Public Key", default=ssh_public_key)
+    ssh_public_key = os.path.expanduser(click.prompt("SSH Public Key", default=ssh_public_key))
     return host, odd_host, reason, ssh_public_key
 
 

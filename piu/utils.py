@@ -16,7 +16,7 @@ def _hosted_zones(route53):
 
 def find_odd_host(region):
     """Returns the Odd SSH bastion hostname for the current AWS account and the
-       specified region if it exists"""
+    specified region if it exists"""
     if not region:
         return
 
@@ -33,7 +33,7 @@ def find_odd_host(region):
 
 def list_running_instances(region, filters):
     """Generator that yields Instance records for running EC2 instances matching the
-       filter and region"""
+    filter and region"""
     ec2 = boto3.resource("ec2", region_name=region)
     effective_filters = [{"Name": "instance-state-name", "Values": ["running"]}]
     effective_filters.extend(filters)
