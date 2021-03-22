@@ -1,6 +1,6 @@
 PyYAML
-boto3>=1.12.0
-botocore>=1.4.10
+boto3>=1.17.33
+botocore>=1.20.33
 click>=1.2.2
 clickclick>=0.10
 pyperclip
