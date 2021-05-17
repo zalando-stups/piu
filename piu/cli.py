@@ -5,25 +5,19 @@ Helper script to request access to a certain host.
 
 import boto3
 import click
-import datetime
 import operator
 import ipaddress
-import json
 import os
 import subprocess
 
-import dateutil
-import requests
 import socket
 import sys
-import time
 
 import sshpubkeys
 import yaml
-import zign.api
 import re
 
-from clickclick import error, AliasedGroup, print_table, OutputFormat, warning
+from clickclick import error, AliasedGroup, print_table, warning
 
 from .error_handling import handle_exceptions
 
@@ -76,22 +70,6 @@ region_option = click.option(
 odd_host_option = click.option(
     "-O", "--odd-host", help="Odd SSH bastion hostname", envvar="ODD_HOST", metavar="HOSTNAME"
 )
-
-
-def parse_time(s: str) -> float:
-    """
-    >>> parse_time('2015-04-14T19:09:01.000Z') > 0
-    True
-    """
-    try:
-        utc = datetime.datetime.strptime(s, "%Y-%m-%dT%H:%M:%S.%fZ")
-        ts = time.time()
-        utc_offset = datetime.datetime.fromtimestamp(ts) - datetime.datetime.utcfromtimestamp(ts)
-        local = utc + utc_offset
-        return local.timestamp()
-    except Exception as e:
-        print(e)
-        return None
 
 
 class AliasedDefaultGroup(AliasedGroup):
@@ -151,8 +129,8 @@ def ssh_keys_added():
         return False
 
 
-def _request_eic_access(
-    ec2, hostname: str, remote_host: str, clip: bool, connect: bool, tunnel: bool, ssh_public_key: str
+def _request_access(
+    ec2, hostname: str, remote_host: str, clip: bool, connect: bool, tunnel: bool, ssh_public_key: str, reason: str
 ) -> bool:
     host_via = hostname
     click.secho("Requesting access with EIC to host {host_via}".format(host_via=host_via), bold=True)
@@ -162,44 +140,10 @@ def _request_eic_access(
         except RuntimeError:
             print("Failed to get attributes for instances with private IP address {}".format(remote_host))
             return False
-        if not send_ssh_key("ubuntu", remote_attributes, ssh_public_key):
+        if not send_ssh_key("ubuntu", remote_attributes, ssh_public_key, reason):
             return False
     ssh_connection(clip, connect, hostname, remote_host, tunnel, "odd", "ubuntu", quick_login=True)
     return True
-
-
-def _request_even_access(even_url, cacert, username, hostname, reason, remote_host, lifetime, clip, connect, tunnel):
-    data = {"username": username, "hostname": hostname, "reason": reason}
-    host_via = hostname
-    if remote_host:
-        data["remote_host"] = remote_host
-        host_via = "{} via {}".format(remote_host, hostname)
-    if lifetime:
-        data["lifetime_minutes"] = lifetime
-    try:
-        access_token = zign.api.get_token("piu", ["uid"])
-    except zign.api.ServerError as e:
-        click.secho("{}".format(e), fg="red", bold=True)
-        return False
-
-    click.secho(
-        "Requesting access with Even to host {host_via} for {username}..".format(host_via=host_via, username=username),
-        bold=True,
-    )
-    r = requests.post(
-        even_url,
-        headers={"Content-Type": "application/json", "Authorization": "Bearer {}".format(access_token)},
-        data=json.dumps(data),
-        verify=cacert,
-    )
-    if r.status_code == 200:
-        click.secho(r.text, fg="green", bold=True)
-        ssh_connection(clip, connect, hostname, remote_host, tunnel, username, username)
-    else:
-        click.secho(
-            "Server returned status {code}: {text}".format(code=r.status_code, text=r.text), fg="red", bold=True
-        )
-    return r.status_code == 200
 
 
 def ssh_connection(clip, connect, hostname, remote_host, tunnel, odd_user, remote_user, quick_login=False):
@@ -252,16 +196,8 @@ def cli(ctx, config_file):
 @click.argument("host", metavar="[USER]@HOST", required=False)
 @click.argument("reason", required=False)
 @click.argument("reason_cont", nargs=-1, metavar="[..]", required=False)
-@click.option("-E", "--even-url", help="Even SSH Access Granting Service URL", envvar="EVEN_URL", metavar="URI")
 @odd_host_option
-@click.option(
-    "-t",
-    "--lifetime",
-    help="Lifetime of the SSH access request in minutes (default: 60)",
-    type=click.IntRange(1, 525600, clamp=True),
-)
 @click.option("--interactive", help="Offers assistance", envvar="PIU_INTERACTIVE", is_flag=True, default=False)
-@click.option("--insecure", help="Do not verify SSL certificate", is_flag=True, default=False)
 @click.option("--clip", help="Copy SSH command into clipboard", is_flag=True, default=False)
 @click.option("--connect", help="Directly connect to the host", envvar="PIU_CONNECT", is_flag=True, default=False)
 @click.option(
@@ -290,11 +226,8 @@ def request_access(
     host,
     reason,
     reason_cont,
-    even_url,
     odd_host,
-    lifetime,
     interactive,
-    insecure,
     clip,
     connect,
     tunnel,
@@ -303,7 +236,6 @@ def request_access(
     ssh_public_key,
 ):
     config = load_config(config_file)
-    even_url = even_url or config.get("even_url")
     odd_host = odd_host or piu.utils.find_odd_host(region) or config.get("odd_host")
     ssh_public_key = validate_ssh_key(
         ssh_public_key, config.get("ssh_public_key"), os.path.expanduser("~/.ssh/id_rsa.pub"), interactive
@@ -320,11 +252,6 @@ def request_access(
         raise click.UsageError('Cannot specify both "connect" and "tunnel"')
 
     parts = host.split("@")
-    if len(parts) > 1:
-        username = parts[0]
-    else:
-        username = zign.api.get_config().get("user") or os.getenv("USER")
-
     hostname = parts[-1]
 
     try:
@@ -339,23 +266,7 @@ def request_access(
     except ValueError:
         ip = None
 
-    reason = " ".join([reason] + list(reason_cont)).strip()
-
-    cacert = not insecure
-    if "cacert" in config:
-        cacert = config["cacert"]
-
-    while not even_url:
-        even_url = click.prompt("Please enter the Even SSH access granting service URL")
-        if not even_url.startswith("http"):
-            # convenience for humans: add HTTPS by default
-            even_url = "https://{}".format(even_url)
-        try:
-            requests.get(even_url)
-        except Exception:
-            error("Could not reach {}".format(even_url))
-            even_url = None
-        config["even_url"] = even_url
+    reason = format_reason_message(reason, reason_cont)
 
     while ip and ip in STUPS_CIDR and not odd_host:
         odd_host = click.prompt("Please enter the Odd SSH bastion hostname")
@@ -372,9 +283,6 @@ def request_access(
     config["ssh_public_key"] = ssh_public_key
     store_config(config, config_file)
 
-    if not even_url.endswith("/access-requests"):
-        even_url = even_url.rstrip("/") + "/access-requests"
-
     first_host = hostname
     remote_host = hostname
     if odd_host:
@@ -389,30 +297,15 @@ def request_access(
         remote_host = None
 
     ec2 = boto3.client("ec2")
-    if not send_odd_ssh_key(ec2, first_host, ssh_public_key):
+    if not send_odd_ssh_key(ec2, first_host, ssh_public_key, reason):
         error("Failed to send SSH key to odd host {host:s}".format(host=first_host))
         sys.exit(1)
 
-    use_eic = True
-    if remote_host and not tunnel:
-        try:
-            remote_attributes = instance_attributes(ec2, "private-ip-address", remote_host)
-        except RuntimeError:
-            print("Failed to find instance with IP {0:s}".format(remote_host))
-            sys.exit(1)
-        use_eic = compatible_ami(ec2, remote_attributes["ImageId"])
-
-    if use_eic:
-        success = _request_eic_access(ec2, first_host, remote_host, clip, connect, tunnel, ssh_public_key)
-    else:
-        success = _request_even_access(
-            even_url, cacert, username, first_host, reason, remote_host, lifetime, clip, connect, tunnel
-        )
-    if not success:
+    if not _request_access(ec2, first_host, remote_host, clip, connect, tunnel, ssh_public_key, reason):
         sys.exit(1)
 
 
-def validate_ssh_key(option_path: str, config_path: str, fallback_path: str, interactive: str) -> str:
+def validate_ssh_key(option_path: str, config_path: str, fallback_path: str, interactive: bool) -> str:
     if option_path:
         if check_ssh_key(option_path):
             return option_path
@@ -445,26 +338,33 @@ def check_ssh_key(key_path: str) -> bool:
     return False
 
 
-def send_odd_ssh_key(ec2, odd_hostname: str, public_key: str) -> bool:
+def send_odd_ssh_key(ec2, odd_hostname: str, public_key: str, reason: str) -> bool:
     odd_ip = socket.gethostbyname(odd_hostname)
     try:
         odd_attributes = instance_attributes(ec2, "ip-address", odd_ip)
     except RuntimeError as e:
         print("Failed to find odd host {0:s} in current account".format(odd_hostname))
         return False
-    return send_ssh_key("odd", odd_attributes, public_key)
+    return send_ssh_key("odd", odd_attributes, public_key, reason)
 
 
-def send_ssh_key(username: str, host: dict, public_key: str) -> bool:
+def send_ssh_key(username: str, host: dict, public_key: str, reason: str) -> bool:
     with open(public_key) as key:
         contents = key.read()
     eic = boto3.client("ec2-instance-connect")
+
+    def add_header(request, **kwargs):
+        request.headers.replace_header("User-Agent", "Piu/{} ({})".format(piu.__version__, reason))
+
+    eic.meta.events.register_first("before-sign.ec2-instance-connect.SendSSHPublicKey", add_header)
+
     result = eic.send_ssh_public_key(
         InstanceId=host["InstanceId"],
         InstanceOSUser=username,
         SSHPublicKey=contents,
         AvailabilityZone=host["Placement"]["AvailabilityZone"],
     )
+
     return result["Success"]
 
 
@@ -505,49 +405,13 @@ def request_access_interactive(region, odd_host, ssh_public_key):
     return host, odd_host, reason, ssh_public_key
 
 
-@cli.command("list-access-requests")
-@click.option("-u", "--user", help="Filter by username", metavar="NAME")
-@odd_host_option
-@click.option("-s", "--status", help="Filter by status", metavar="NAME", type=click.Choice(STATUS_NAMES))
-@click.option("-l", "--limit", help="Limit number of results", type=int, default=20)
-@click.option("--offset", help="Offset", type=int, default=0)
-@output_option
-@region_option
-@click.pass_obj
-def list_access_requests(config_file, user, odd_host, status, limit, offset, output, region):
-    """List access requests filtered by user, host and status"""
-    config = load_config(config_file)
+def format_reason_message(first, rest) -> str:
+    result = " ".join([first] + list(rest)).strip()
+    if len(result) > 1000:
+        result = result[:997] + "..."
 
-    if user == "*":
-        user = None
-
-    if odd_host == "*":
-        odd_host = None
-    elif odd_host is None:
-        odd_host = piu.utils.find_odd_host(region) or config.get("odd_host")
-
-    access_token = zign.api.get_token("piu", ["piu"])
-
-    params = {"username": user, "hostname": odd_host, "status": status, "limit": limit, "offset": offset}
-    r = requests.get(
-        config.get("even_url").rstrip("/") + "/access-requests",
-        params=params,
-        headers={"Authorization": "Bearer {}".format(access_token)},
-    )
-    r.raise_for_status()
-    rows = []
-    for req in r.json():
-        req["created_time"] = parse_time(req["created"])
-        rows.append(req)
-    rows.sort(key=lambda x: x["created_time"])
-    with OutputFormat(output):
-        print_table(
-            "username hostname remote_host reason lifetime_minutes status status_reason created_time".split(),
-            rows,
-            styles=STYLES,
-            titles=TITLES,
-            max_column_widths=MAX_COLUMN_WIDTHS,
-        )
+    # We'll be shoving this into the User-Agent HTTP header, so make sure we don't have anything weird
+    return re.sub(r"[^.,; \w]", "?", result).encode("us-ascii", "replace").decode("us-ascii")
 
 
 def instance_attributes(ec2, filter_name: str, filter_value: str) -> dict:
@@ -555,16 +419,6 @@ def instance_attributes(ec2, filter_name: str, filter_value: str) -> dict:
     if len(instances["Reservations"]) < 1 or len(instances["Reservations"][0]["Instances"]) < 1:
         raise RuntimeError("Failed to find instance with {0:s}: {1:s}".format(filter_name, filter_value))
     return instances["Reservations"][0]["Instances"][0]
-
-
-def compatible_ami(ec2, ami_id: str) -> bool:
-    amis = ec2.describe_images(ImageIds=[ami_id])
-    if len(amis["Images"]) != 1:
-        raise RuntimeError("Failed to determine AMI properties for ami {0:s}".format(ami_id))
-    ami_creation = dateutil.parser.parse(amis["Images"][0]["CreationDate"])
-    if ami_creation > dateutil.parser.parse(COMPATIBLE_AMI_CUTOFF):
-        return True
-    return False
 
 
 def main():

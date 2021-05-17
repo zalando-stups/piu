@@ -128,7 +128,7 @@ def setup_package():
         test_suite="tests",
         packages=setuptools.find_packages(exclude=["tests", "tests.*"]),
         install_requires=install_reqs,
-        setup_requires=["six", "black"],
+        setup_requires=["six", "black", "wheel"],
         cmdclass=cmdclass,
         tests_require=["pytest-cov", "pytest"],
         command_options=command_options,
